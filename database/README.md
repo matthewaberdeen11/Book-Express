@@ -4,15 +4,30 @@ This directory contains all database-related files for the Book Express Inventor
 
 ## Structure
 
-- **schema.sql** - Initial PostgreSQL database schema
+- **schema.sql** - Initial MySQL database schema
 - **migrations/** - Database migration scripts for schema changes
 
-## Setup
+## Setup with XAMPP MySQL
 
-1. Ensure PostgreSQL is installed and running via XAMPP
+1. Ensure MySQL is installed and running via XAMPP
 2. Create a new database: `CREATE DATABASE book_express;`
-3. Run the schema file: `psql -U postgres -d book_express -f database/schema.sql`
-4. Use migrations/ folder for any future schema changes
+3. Run the schema file using command line:
+   ```bash
+   mysql -u root book_express < database/schema.sql
+   ```
+4. Add the manager user:
+   ```bash
+   mysql -u root book_express < database/migrations/002_add_manager_user.sql
+   ```
+
+## Alternative Setup via phpMyAdmin
+
+1. Open phpMyAdmin (http://localhost/phpmyadmin)
+2. Create new database called `book_express`
+3. Select the database
+4. Click "Import"
+5. Choose `database/schema.sql` and click Import
+6. Repeat for `database/migrations/002_add_manager_user.sql`
 
 ## Database Tables
 
@@ -64,5 +79,6 @@ Tracks file uploads and import operations.
 
 - Table names: snake_case (e.g., `users`, `books`)
 - Column names: snake_case
-- Primary keys: `id` (serial/bigserial)
+- Primary keys: `id` (auto increment)
 - Foreign keys: `table_name_id`
+

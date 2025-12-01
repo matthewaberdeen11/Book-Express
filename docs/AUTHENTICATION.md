@@ -163,11 +163,12 @@ Users are stored in the `users` table with these fields:
 ## Setup Instructions
 
 1. Create database: `CREATE DATABASE book_express;`
-2. Run schema: `psql -U postgres -d book_express -f database/schema.sql`
-3. Add manager user: `psql -U postgres -d book_express -f database/migrations/002_add_manager_user.sql`
-4. Configure .env with database credentials
-5. Place project in XAMPP htdocs folder
-6. Access via `http://localhost/Book-Express/frontend/login.html`
+2. Run schema: `mysql -u root book_express < database/schema.sql`
+3. Add manager user: `mysql -u root book_express < database/migrations/002_add_manager_user.sql`
+4. Configure .env with database credentials (MySQL root user by default)
+5. Place project in XAMPP htdocs folder (C:\xampp\htdocs\)
+6. Start Apache and MySQL in XAMPP
+7. Access via `http://localhost/Book-Express/frontend/login.html`
 
 ### Login with:
 - **Username:** manager
@@ -190,7 +191,6 @@ curl -X POST http://localhost/Book-Express/backend/api/login.php \
 # Check user
 curl http://localhost/Book-Express/backend/api/user.php
 ```
-
 ## Future Enhancements
 
 - User creation, edit, and deletion by manager

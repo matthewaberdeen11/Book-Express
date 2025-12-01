@@ -1,9 +1,9 @@
 -- Book Express Inventory Management System
--- PostgreSQL Database Schema
+-- MySQL Database Schema
 
 -- Create users table for authentication
 CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -12,12 +12,12 @@ CREATE TABLE users (
     role VARCHAR(20) DEFAULT 'staff',
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Create books table
 CREATE TABLE books (
-    id SERIAL PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     isbn VARCHAR(20) UNIQUE NOT NULL,
     title VARCHAR(255) NOT NULL,
     author VARCHAR(255),
@@ -26,40 +26,43 @@ CREATE TABLE books (
     description TEXT,
     unit_price DECIMAL(10, 2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Create inventory table
 CREATE TABLE inventory (
-    id SERIAL PRIMARY KEY,
-    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    quantity_on_hand INTEGER DEFAULT 0,
-    reorder_level INTEGER DEFAULT 10,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    book_id INT NOT NULL,
+    quantity_on_hand INT DEFAULT 0,
+    reorder_level INT DEFAULT 10,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
 );
 
 -- Create sales table
 CREATE TABLE sales (
-    id SERIAL PRIMARY KEY,
-    book_id INTEGER NOT NULL REFERENCES books(id),
-    quantity_sold INTEGER NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    book_id INT NOT NULL,
+    quantity_sold INT NOT NULL,
     sale_price DECIMAL(10, 2) NOT NULL,
     sale_date DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id)
 );
 
 -- Create import_logs table for file uploads
 CREATE TABLE import_logs (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id),
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     import_type VARCHAR(50),
     status VARCHAR(20) DEFAULT 'pending',
-    rows_processed INTEGER DEFAULT 0,
-    rows_failed INTEGER DEFAULT 0,
+    rows_processed INT DEFAULT 0,
+    rows_failed INT DEFAULT 0,
     error_message TEXT,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP
+    completed_at TIMESTAMP NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Create indexes for better query performance
