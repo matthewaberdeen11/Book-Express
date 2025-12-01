@@ -7,43 +7,151 @@
     <link rel="stylesheet" href="css/dashboard.css">
 </head>
 <body>
-    <div class="dashboard">
-        <nav class="navbar">
-            <div class="nav-content">
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
                 <h2 class="logo">Book Express</h2>
-                <div class="nav-right">
-                    <span id="userName" class="user-name"></span>
-                    <button onclick="logout()" class="btn-logout">Logout</button>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <div class="menu-section">
+                    <ul>
+                        <li><a href="#dashboard" class="menu-item active" data-section="dashboard"><span class="icon">🏠</span> Dashboard</a></li>
+                        <li><a href="#inventory" class="menu-item" data-section="inventory"><span class="icon">📦</span> Inventory</a></li>
+                        <li><a href="#catalogue" class="menu-item" data-section="catalogue"><span class="icon">📋</span> Catalogue</a></li>
+                        <li><a href="#low-stock" class="menu-item" data-section="low-stock"><span class="icon">⚠️</span> Low Stock Alerts</a></li>
+                    </ul>
+                </div>
+                
+                <div class="menu-section">
+                    <h3 class="menu-title">ADMIN</h3>
+                    <ul>
+                        <li><a href="#users" class="menu-item" data-section="users"><span class="icon">👤</span> User Management</a></li>
+                        <li><a href="#analytics" class="menu-item" data-section="analytics"><span class="icon">📊</span> Analytics</a></li>
+                        <li><a href="#import" class="menu-item" data-section="import"><span class="icon">⬆️</span> Import Data</a></li>
+                        <li><a href="#activity" class="menu-item" data-section="activity"><span class="icon">📝</span> Activity Log</a></li>
+                    </ul>
+                </div>
+                
+                <div class="menu-section logout-section">
+                    <ul>
+                        <li><a href="#" class="menu-item logout" onclick="logout()"><span class="icon">🚪</span> Logout</a></li>
+                    </ul>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <div class="topbar">
+                <div class="topbar-right">
+                    <div class="user-profile">
+                        <div class="user-avatar" id="userInitial">C</div>
+                        <div class="user-info">
+                            <p class="user-name" id="userName">Manager</p>
+                            <p class="user-role" id="userRole">Manager</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </nav>
-        
-        <div class="sidebar">
-            <ul class="menu">
-                <li><a href="#inventory">Inventory</a></li>
-                <li><a href="#sales">Sales</a></li>
-                <li><a href="#uploads">Uploads</a></li>
-                <li><a href="#settings">Settings</a></li>
-            </ul>
-        </div>
-        
-        <main class="content">
-            <h1>Welcome to Book Express Inventory Management</h1>
-            <p>Select an option from the menu to get started.</p>
+            
+            <!-- Content Sections -->
+            <section id="dashboard-section" class="content-section active">
+                <div class="section-header">
+                    <h1>Dashboard</h1>
+                    <p class="welcome-message" id="welcomeMessage">Welcome back! Here's a summary of what's happening today.</p>
+                </div>
+                
+                <div class="cards-container">
+                    <div class="card">
+                        <div class="card-icon">📦</div>
+                        <div class="card-content">
+                            <p class="card-label">Total Items</p>
+                            <p class="card-value" id="totalItems">0</p>
+                            <p class="card-change positive">+2.5% from last month</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-icon">📊</div>
+                        <div class="card-content">
+                            <p class="card-label">Items In/Out of Stock</p>
+                            <p class="card-value" id="stockStatus">0 / 0</p>
+                            <p class="card-change">In Stock / Out of Stock</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-icon">⚠️</div>
+                        <div class="card-content">
+                            <p class="card-label">Low Stock Alerts</p>
+                            <p class="card-value" id="lowStockCount">0</p>
+                            <p class="card-change warning">Needs re-ordering soon</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-icon">💰</div>
+                        <div class="card-content">
+                            <p class="card-label">Total Inventory Value</p>
+                            <p class="card-value" id="inventoryValue">$0.00</p>
+                            <p class="card-change negative">-$1.2k from last month</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="section-content">
+                    <div class="content-card">
+                        <h3>Sales Performance</h3>
+                        <div class="placeholder-chart">
+                            <p>Chart will be displayed here</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Other Sections (Placeholder) -->
+            <section id="inventory-section" class="content-section">
+                <h1>Inventory Management</h1>
+                <p>Inventory management section coming soon...</p>
+            </section>
+            
+            <section id="catalogue-section" class="content-section">
+                <h1>Catalogue</h1>
+                <p>Catalogue section coming soon...</p>
+            </section>
+            
+            <section id="low-stock-section" class="content-section">
+                <h1>Low Stock Alerts</h1>
+                <p>Low stock alerts section coming soon...</p>
+            </section>
+            
+            <section id="users-section" class="content-section">
+                <h1>User Management</h1>
+                <p>User management section coming soon...</p>
+            </section>
+            
+            <section id="analytics-section" class="content-section">
+                <h1>Analytics</h1>
+                <p>Analytics section coming soon...</p>
+            </section>
+            
+            <section id="import-section" class="content-section">
+                <h1>Import Data</h1>
+                <p>Import data section coming soon...</p>
+            </section>
+            
+            <section id="activity-section" class="content-section">
+                <h1>Activity Log</h1>
+                <p>Activity log section coming soon...</p>
+            </section>
         </main>
     </div>
     
     <script src="js/auth.js"></script>
-    <script>
-        // Check authentication on page load
-        window.addEventListener('load', async function() {
-            const user = await checkAuth();
-            if (!user) {
-                window.location.href = '/Book-Express/frontend/login.html';
-            } else {
-                document.getElementById('userName').textContent = user.username;
-            }
-        });
-    </script>
+    <script src="js/dashboard.js"></script>
 </body>
 </html>
+
