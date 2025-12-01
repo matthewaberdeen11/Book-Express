@@ -1,0 +1,147 @@
+/* Dashboard Styles */
+
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: #f5f7fa;
+}
+
+.navbar {
+    background: #2c3e50;
+    color: white;
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.nav-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.user-name {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.btn-logout {
+    padding: 8px 16px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.btn-logout:hover {
+    background: #c0392b;
+}
+
+.sidebar {
+    position: absolute;
+    left: 0;
+    top: 70px;
+    width: 250px;
+    background: white;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    height: calc(100vh - 70px);
+    overflow-y: auto;
+}
+
+.menu {
+    list-style: none;
+    padding: 20px 0;
+}
+
+.menu li {
+    margin: 0;
+}
+
+.menu a {
+    display: block;
+    padding: 15px 30px;
+    color: #2c3e50;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border-left: 3px solid transparent;
+}
+
+.menu a:hover {
+    background: #f5f7fa;
+    border-left-color: #2196f3;
+    color: #2196f3;
+}
+
+.content {
+    margin-left: 250px;
+    padding: 40px;
+    flex: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.content h1 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.content p {
+    color: #7f8c8d;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+        top: 0;
+    }
+    
+    .content {
+        margin-left: 0;
+    }
+    
+    .menu {
+        display: flex;
+        flex-direction: row;
+        padding: 0;
+        flex-wrap: wrap;
+    }
+    
+    .menu li {
+        flex: 1;
+        min-width: 120px;
+    }
+    
+    .menu a {
+        padding: 12px 15px;
+        text-align: center;
+        border-left: none;
+        border-bottom: 2px solid transparent;
+    }
+    
+    .menu a:hover {
+        border-bottom-color: #2196f3;
+        border-left: none;
+    }
+}

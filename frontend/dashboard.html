@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Express - Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <div class="dashboard">
+        <nav class="navbar">
+            <div class="nav-content">
+                <h2 class="logo">Book Express</h2>
+                <div class="nav-right">
+                    <span id="userName" class="user-name"></span>
+                    <button onclick="logout()" class="btn-logout">Logout</button>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="sidebar">
+            <ul class="menu">
+                <li><a href="#inventory">Inventory</a></li>
+                <li><a href="#sales">Sales</a></li>
+                <li><a href="#uploads">Uploads</a></li>
+                <li><a href="#settings">Settings</a></li>
+            </ul>
+        </div>
+        
+        <main class="content">
+            <h1>Welcome to Book Express Inventory Management</h1>
+            <p>Select an option from the menu to get started.</p>
+        </main>
+    </div>
+    
+    <script src="js/auth.js"></script>
+    <script>
+        // Check authentication on page load
+        window.addEventListener('load', async function() {
+            const user = await checkAuth();
+            if (!user) {
+                window.location.href = '/Book-Express/frontend/login.html';
+            } else {
+                document.getElementById('userName').textContent = user.username;
+            }
+        });
+    </script>
+</body>
+</html>
