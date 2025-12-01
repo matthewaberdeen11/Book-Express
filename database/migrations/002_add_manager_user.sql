@@ -7,7 +7,7 @@ INSERT INTO users (username, email, password_hash, first_name, last_name, role, 
 VALUES (
     'manager',
     'manager@bookexpress.local',
-    '$2y$10$7TIo5.k6F4.5m1N2O3P4Qu.Y1aB2cD3eF4gH5iJ6kL7mN8oP9qR',
+    '$2y$10$hpGO7Aski0TRm2UNHeDwZe.MvYpY9rM3GtlQBph/mpUsY92TJxiYS',
     'System',
     'Manager',
     'admin',
