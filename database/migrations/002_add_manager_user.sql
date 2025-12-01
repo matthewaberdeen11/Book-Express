@@ -1,6 +1,6 @@
 -- Insert predefined manager user
 -- Username: manager
--- Password: Manager@2025
+-- Password: CHECK WHATSAPP CHAT
 -- This user has full system access
 
 INSERT INTO users (username, email, password_hash, first_name, last_name, role, is_active)
