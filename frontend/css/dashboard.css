@@ -7,14 +7,15 @@
 :root {
     --primary-color: #0066ff;
     --dark-bg: #0f1823;
-    --sidebar-bg: #1a2a42;
-    --card-bg: #1e3150;
+    --sidebar-bg: #0f1823;
+    --card-bg: #0f1823;
     --border-color: #2a3a52;
     --text-primary: #e0e6ff;
     --text-secondary: #8b92ad;
     --success-color: #10b981;
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
+    --icon-color: rgba(255, 255, 255, 0.6);
 }
 
 body {
@@ -105,7 +106,32 @@ body {
 
 .menu-item .icon {
     margin-right: 12px;
-    font-size: 18px;
+    font-size: 12px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid var(--icon-color);
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    color: var(--icon-color);
+}
+
+.menu-item .icon i {
+    font-size: 12px;
+    color: inherit;
+}
+
+.menu-item:hover .icon {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+.menu-item.active .icon {
+    background-color: white;
+    border-color: white;
+    color: var(--primary-color);
 }
 
 .logout-section {
@@ -131,6 +157,22 @@ body {
     overflow-y: auto;
 }
 
+/* ==================== SIDEBAR TOGGLE ==================== */
+.sidebar-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 10px;
+    margin-right: 15px;
+}
+
+.sidebar.collapsed {
+    display: none;
+}
+
 /* ==================== TOPBAR ==================== */
 .topbar {
     height: 70px;
@@ -138,7 +180,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     padding: 0 30px;
 }
 
@@ -237,8 +279,16 @@ body {
 }
 
 .card-icon {
-    font-size: 40px;
+    font-size: 24px;
     flex-shrink: 0;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    color: var(--primary-color);
 }
 
 .card-content {
@@ -333,25 +383,33 @@ body {
 
 /* ==================== RESPONSIVE DESIGN ==================== */
 @media (max-width: 768px) {
-    .dashboard-container {
-        flex-direction: column;
+    .sidebar-toggle {
+        display: block;
     }
     
     .sidebar {
-        width: 100%;
-        height: auto;
-        border-right: none;
-        border-bottom: 1px solid var(--border-color);
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 280px;
+        height: 100vh;
+        z-index: 1000;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
     }
     
-    .sidebar-menu {
-        flex-direction: row;
-        flex-wrap: wrap;
+    .sidebar.collapsed {
+        display: none;
     }
     
-    .menu-section {
-        flex: 1;
-        min-width: 200px;
+    .dashboard-container.sidebar-open::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 999;
     }
     
     .cards-container {

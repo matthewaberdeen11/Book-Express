@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Set up navigation
     setupNavigation();
     
+    // Set up sidebar toggle for mobile
+    setupSidebarToggle();
+    
     // Load dashboard data
     loadDashboardData();
 });
@@ -62,8 +65,43 @@ function setupNavigation() {
             if (targetSection) {
                 targetSection.classList.add('active');
             }
+            
+            // Close sidebar on mobile after selection
+            closeSidebarMobile();
         });
     });
+}
+
+// ==================== SIDEBAR TOGGLE ====================
+function setupSidebarToggle() {
+    const toggle = document.getElementById('sidebarToggle');
+    const sidebar = document.querySelector('.sidebar');
+    const container = document.querySelector('.dashboard-container');
+    
+    if (!toggle) return;
+    
+    toggle.addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+        container.classList.toggle('sidebar-open');
+    });
+    
+    // Close sidebar when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.sidebar') && !e.target.closest('.sidebar-toggle')) {
+            closeSidebarMobile();
+        }
+    });
+}
+
+function closeSidebarMobile() {
+    const sidebar = document.querySelector('.sidebar');
+    const container = document.querySelector('.dashboard-container');
+    
+    // Only close on mobile screens
+    if (window.innerWidth <= 768) {
+        sidebar.classList.add('collapsed');
+        container.classList.remove('sidebar-open');
+    }
 }
 
 // ==================== DATA LOADING ====================
