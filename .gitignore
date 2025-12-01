@@ -15,6 +15,16 @@
 *~
 .DS_Store
 Thumbs.db
+*.code-workspace
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
 # PHP/Composer
 vendor/
