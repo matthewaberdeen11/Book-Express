@@ -15,8 +15,8 @@ Book Express is a web-based inventory management system designed to help booksto
 
 - **Frontend**: HTML5, CSS3, JavaScript/AJAX
 - **Backend**: PHP (Vanilla)
-- **Database**: PostgreSQL
-- **Server**: XAMPP (Apache + PostgreSQL)
+- **Database**: MySQL
+- **Server**: XAMPP (Apache + MySQL)
 
 ## Project Structure
 
@@ -59,7 +59,7 @@ Book-Express/
    ```
 
 4. **Start XAMPP**
-   - Start Apache and PostgreSQL services
+   - Start Apache and MySQL services
    - Place the project in XAMPP's htdocs folder
 
 5. **Access the application**
