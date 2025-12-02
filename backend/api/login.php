@@ -21,7 +21,7 @@ if (!isset($input['username']) || !isset($input['password'])) {
     exit;
 }
 
-$auth = new Auth($db);
+$auth = new Auth(get_db_connection());
 $result = $auth->login($input['username'], $input['password']);
 
 if ($result['success']) {

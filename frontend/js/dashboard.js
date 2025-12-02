@@ -9,15 +9,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize dashboard with user data
     initializeDashboard(user);
-    
+    // Load dashboard statistics
+    loadDashboardData();
     // Set up navigation
     setupNavigation();
-    
     // Set up sidebar toggle for mobile
     setupSidebarToggle();
-    
-    // Load dashboard data
-    loadDashboardData();
 });
 
 // ==================== INITIALIZATION FUNCTIONS ====================
@@ -29,10 +26,9 @@ function initializeDashboard(user) {
     document.getElementById('userInitial').textContent = firstLetter;
     document.getElementById('userName').textContent = user.username;
     document.getElementById('userRole').textContent = role;
-    
     // Update welcome message
     const welcomeMessage = document.getElementById('welcomeMessage');
-    welcomeMessage.textContent = `Welcome back, ${user.username}! Here's a summary of what's happening today.`;
+    welcomeMessage.textContent = `Welcome back, ${user.username}! Select an option from the sidebar to manage your inventory, catalogue, imports, and more.`;
 }
 
 function setupNavigation() {
@@ -44,28 +40,10 @@ function setupNavigation() {
             if (this.classList.contains('logout')) {
                 return;
             }
-            
-            e.preventDefault();
-            
-            const section = this.getAttribute('data-section');
-            if (!section) return;
-            
-            // Remove active class from all menu items
-            menuItems.forEach(el => el.classList.remove('active'));
-            
-            // Add active class to clicked item
-            this.classList.add('active');
-            
-            // Hide all sections
-            const sections = document.querySelectorAll('.content-section');
-            sections.forEach(s => s.classList.remove('active'));
-            
-            // Show selected section
-            const targetSection = document.getElementById(`${section}-section`);
-            if (targetSection) {
-                targetSection.classList.add('active');
+            // For navigation, go to the href page
+            if (this.getAttribute('href')) {
+                window.location.href = this.getAttribute('href');
             }
-            
             // Close sidebar on mobile after selection
             closeSidebarMobile();
         });
@@ -85,10 +63,18 @@ function setupSidebarToggle() {
         container.classList.toggle('sidebar-open');
     });
     
-    // Close sidebar when clicking outside
+    // Close sidebar when clicking outside on mobile
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.sidebar') && !e.target.closest('.sidebar-toggle')) {
             closeSidebarMobile();
+        }
+    });
+    
+    // Handle window resize - ensure sidebar is visible on large screens
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            sidebar.classList.remove('collapsed');
+            container.classList.remove('sidebar-open');
         }
     });
 }
@@ -106,23 +92,37 @@ function closeSidebarMobile() {
 
 // ==================== DATA LOADING ====================
 function loadDashboardData() {
-    // These are placeholder values - replace with actual API calls
-    updateDashboardCards();
+    fetch('../backend/api/dashboard.php')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error loading dashboard data:', data.error);
+                return;
+            }
+            updateDashboardCards(data);
+        })
+        .catch(err => console.error('Failed to load dashboard data:', err));
 }
 
-function updateDashboardCards() {
-    // Placeholder data - replace with real API calls to backend
-    const totalItems = 15230;
-    const inStock = 14800;
-    const outOfStock = 430;
-    const lowStockAlerts = 15;
-    const inventoryValue = 185450.75;
+function updateDashboardCards(data) {
+    // Update total items
+    document.getElementById('totalItems').textContent = data.totalItems || 0;
     
-    // Update card values
-    document.getElementById('totalItems').textContent = totalItems.toLocaleString();
-    document.getElementById('stockStatus').textContent = `${inStock.toLocaleString()} / ${outOfStock.toLocaleString()}`;
-    document.getElementById('lowStockCount').textContent = lowStockAlerts;
-    document.getElementById('inventoryValue').textContent = `$${inventoryValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // Update in/out of stock
+    document.getElementById('stockStatus').textContent = `${data.inStock || 0} / ${data.outOfStock || 0}`;
+    
+    // Update low stock alerts
+    document.getElementById('lowStockCount').textContent = data.lowStockCount || 0;
+    
+    // Update inventory value in JMD format
+    const value = parseFloat(data.inventoryValue) || 0;
+    const formatted = new Intl.NumberFormat('en-JM', { 
+        style: 'currency', 
+        currency: 'JMD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(value);
+    document.getElementById('inventoryValue').textContent = formatted;
 }
 
 // ==================== LOGOUT FUNCTION ====================
