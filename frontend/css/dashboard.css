@@ -1217,6 +1217,12 @@ body {
 
 .inventory-table tr.out-of-stock .stock-quantity {
     color: var(--danger-color);
+    font-weight: bold;
+}
+
+.stock-quantity.out-of-stock {
+    color: var(--danger-color);
+    font-weight: bold;
 }
 
 .action-btn {

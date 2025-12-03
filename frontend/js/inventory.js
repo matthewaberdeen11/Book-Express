@@ -47,7 +47,7 @@ function debounceSearch(query) {
 // Load inventory from API
 async function loadInventory() {
     try {
-        const response = await fetch('/backend/api/catalogue/list.php');
+        const response = await fetch('../backend/api/catalogue/list.php');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -115,11 +115,11 @@ function displayInventory(items) {
         
         const stockClass = stock === 0 ? 'out-of-stock' : 
                           (stock < 10) ? 'low-stock' : '';
-        const stockStatus = stock === 0 ? 'Out of Stock' : '';
+        const stockStatus = stock === 0 ? ' (Out of Stock)' : '';
         
         return `
             <tr class="${stockClass}">
-                <td>
+                <td style="width: 40px;">
                     <input type="checkbox" class="item-checkbox" data-item-id="${itemId}" 
                            onchange="updateSelection()">
                 </td>
@@ -128,11 +128,11 @@ function displayInventory(items) {
                 </td>
                 <td>${escapeHtml(gradeLevel)}</td>
                 <td class="stock-cell">
-                    <span class="stock-quantity">${stock}</span>
-                    ${stockStatus ? `<span class="out-of-stock-badge">${stockStatus}</span>` : ''}
+                    <span class="stock-quantity ${stock === 0 ? 'out-of-stock' : ''}">${stock}</span>
+                    ${stockStatus}
                 </td>
                 <td>${formatPrice(price)}</td>
-                <td>
+                <td style="width: 100px;">
                     <button class="action-btn edit-btn" title="Edit" onclick="editItem(${itemId}, '${source}')">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -177,7 +177,7 @@ function updateSelectionCount() {
 async function showItemDetail(source, itemId, title) {
     try {
         const params = source === 'csv' ? `item_id=${itemId}` : `book_id=${itemId}`;
-        const response = await fetch(`/backend/api/catalogue/list.php?${params}`);
+        const response = await fetch(`../backend/api/catalogue/list.php?${params}`);
         
         if (!response.ok) throw new Error('Failed to load item details');
         
@@ -266,7 +266,7 @@ function displayItemDetail(item, source) {
 async function loadItemHistory(source, itemId) {
     try {
         const params = source === 'csv' ? `item_id=${itemId}` : `book_id=${itemId}`;
-        const response = await fetch(`/backend/api/catalogue/get_history.php?${params}&limit=10`);
+        const response = await fetch(`../backend/api/catalogue/get_history.php?${params}&limit=10`);
         
         if (!response.ok) throw new Error('Failed to load history');
         
@@ -354,8 +354,8 @@ async function saveBook(event, itemId = null, source = null) {
         if (itemId) {
             // Edit existing item
             const endpoint = source === 'csv' ? 
-                '/backend/api/catalogue/update_item.php' : 
-                '/backend/api/catalogue/update_item.php';
+                '../backend/api/catalogue/update_item.php' : 
+                '../backend/api/catalogue/update_item.php';
             
             formData[source === 'csv' ? 'item_id' : 'book_id'] = itemId;
             
@@ -368,7 +368,7 @@ async function saveBook(event, itemId = null, source = null) {
             if (!response.ok) throw new Error('Failed to update book');
         } else {
             // Create new item
-            const response = await fetch('/backend/api/catalogue/create_item.php', {
+            const response = await fetch('../backend/api/catalogue/create_item.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
