@@ -1,0 +1,146 @@
+<!-- File: search.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Express - Inventory Search</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/search.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-book"></i> Book Express</h2>
+                <button id="sidebarToggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <div class="user-profile">
+                <div class="user-avatar" id="userInitial">U</div>
+                <div class="user-info">
+                    <h3 id="userName">User</h3>
+                    <p id="userRole">Role</p>
+                </div>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="dashboard.html" class="menu-item">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
+                <a href="search.html" class="menu-item active">
+                    <i class="fas fa-search"></i> Search Inventory
+                </a>
+                <a href="catalogue.html" class="menu-item">
+                    <i class="fas fa-book"></i> Catalogue
+                </a>
+                <a href="import.html" class="menu-item">
+                    <i class="fas fa-file-import"></i> Import CSV
+                </a>
+                <a href="alerts.html" class="menu-item">
+                    <i class="fas fa-bell"></i> Low Stock Alerts
+                </a>
+                <a href="analytics.html" class="menu-item">
+                    <i class="fas fa-chart-bar"></i> Analytics
+                </a>
+                <a href="#" class="menu-item logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="content-header">
+                <h1><i class="fas fa-search"></i> Inventory Search</h1>
+                <p>Search and view real-time stock levels</p>
+            </div>
+
+            <!-- Search Box -->
+            <div class="search-container">
+                <div class="search-box">
+                    <div class="search-input-group">
+                        <i class="fas fa-search search-icon"></i>
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            placeholder="Search by Item ID, Book Title, Grade Level, or Subject..."
+                            autocomplete="off"
+                        >
+                        <button id="searchButton" class="btn-primary">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                    </div>
+                    
+                    <!-- Quick Filters -->
+                    <div class="quick-filters">
+                        <div class="filter-group">
+                            <label>Grade Level:</label>
+                            <select id="gradeFilter">
+                                <option value="">All Grades</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label>Subject:</label>
+                            <select id="subjectFilter">
+                                <option value="">All Subjects</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label>
+                                <input type="checkbox" id="inStockOnly">
+                                Show in-stock only
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Search Results -->
+                <div class="search-results-container">
+                    <div class="results-header">
+                        <h3><i class="fas fa-list"></i> Search Results</h3>
+                        <div class="results-count">
+                            <span id="resultsCount">0</span> items found
+                        </div>
+                    </div>
+                    
+                    <div id="searchResults" class="search-results">
+                       
+                        <div class="no-results">
+                            <i class="fas fa-search fa-2x"></i>
+                            <p>Enter search terms to find inventory items</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div class="pagination" id="pagination">
+                       
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Item Details Modal -->
+            <div id="itemModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Item Details</h2>
+                        <span class="close-modal">&times;</span>
+                    </div>
+                    <div class="modal-body" id="itemDetails">
+                       
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/search.js"></script>
+</body>
+</html>

@@ -349,6 +349,20 @@ body {
     color: var(--text-primary);
 }
 
+/* ==================== DASHBOARD SEARCH / LIST ITEMS ==================== */
+.dash-item {
+    transition: background-color 0.18s ease, color 0.18s ease, border-left 0.18s ease;
+}
+.dash-item.out-of-stock {
+    background-color: rgba(239, 68, 68, 0.06);
+    border-left: 4px solid var(--danger-color);
+    color: var(--danger-color);
+}
+.dash-item.out-of-stock .dash-qty {
+    color: var(--danger-color);
+    font-weight: 700;
+}
+
 .placeholder-chart {
     background: linear-gradient(135deg, var(--border-color), rgba(0, 102, 255, 0.1));
     border-radius: 8px;

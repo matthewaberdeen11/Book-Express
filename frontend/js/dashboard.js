@@ -1,3 +1,10 @@
+// ==================== UTILITY FUNCTIONS ====================
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', async function() {
     // Check authentication
@@ -15,6 +22,102 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupNavigation();
     // Set up sidebar toggle for mobile
     setupSidebarToggle();
+
+    // Set up dashboard search bar
+    setupDashboardSearch();
+// ==================== DASHBOARD SEARCH ====================
+function setupDashboardSearch() {
+    const input = document.getElementById('dashboardSearchInput');
+    const btn = document.getElementById('dashboardSearchBtn');
+    const resultsDiv = document.getElementById('dashboardSearchResults');
+    if (!input || !btn || !resultsDiv) return;
+    console.debug('dashboard search: elements found', { input, btn, resultsDiv });
+    // Ensure button acts as a button
+    try { btn.type = 'button'; } catch (e) {}
+
+    btn.addEventListener('click', searchInventory);
+    input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') searchInventory();
+    });
+
+    let lastUpdate = Math.floor(Date.now() / 1000);
+
+    async function searchInventory() {
+        console.debug('dashboard search: performing search');
+        const query = input.value.trim();
+        if (!query) {
+            resultsDiv.innerHTML = '<p style="color:#888;">Enter a search term.</p>';
+            return;
+        }
+        resultsDiv.innerHTML = '<p style="color:#888;"><i class="fas fa-spinner fa-spin"></i> Searching...</p>';
+        try {
+            const response = await fetch(`../backend/api/search.php?action=search&q=${encodeURIComponent(query)}&limit=10`, { credentials: 'same-origin' });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            if (!data.results || data.results.length === 0) {
+                resultsDiv.innerHTML = '<p style="color:#888;">No items found.</p>';
+                return;
+            }
+            let html = '<ul style="list-style:none;padding:0;">';
+            data.results.forEach(item => {
+                const outClass = (item.quantity === null || Number(item.quantity) <= 0) ? 'out-of-stock' : '';
+                html += `<li class="dash-item ${outClass}" data-item-id="${item.item_id}" style="padding:10px 0;border-bottom:1px solid #eee;">
+                    <strong>${escapeHtml(item.item_name)}</strong> <span style="color:#2196f3;">(${escapeHtml(item.item_id)})</span><br>
+                    Quantity: <span class="dash-qty" data-item-id="${escapeHtml(item.item_id)}">${item.quantity}</span> | Rate: ${escapeHtml(item.rate)}</li>`;
+            });
+            html += '</ul>';
+            resultsDiv.innerHTML = html;
+            // update lastUpdate to server time if provided
+            if (data.server_time) lastUpdate = data.server_time;
+            // start polling for updates
+            startRealtimePolling();
+        } catch (err) {
+            resultsDiv.innerHTML = `<p style="color:#c00;">Error: ${err.message}</p>`;
+        }
+    }
+
+    // Poll for updates every 3 seconds
+    let pollingId = null;
+    function startRealtimePolling() {
+        if (pollingId) return;
+        pollingId = setInterval(fetchUpdates, 3000);
+    }
+
+    async function fetchUpdates() {
+        try {
+            const resp = await fetch(`../backend/api/search.php?action=getUpdates&since=${lastUpdate}&limit=50`, { credentials: 'same-origin' });
+            const payload = await resp.json();
+            if (payload.server_time) lastUpdate = payload.server_time;
+            if (!payload.results || payload.results.length === 0) return;
+
+            payload.results.forEach(item => {
+                const selector = `[data-item-id="${item.item_id}"]`;
+                const existing = resultsDiv.querySelector(selector);
+                const outClass = (item.quantity === null || Number(item.quantity) <= 0) ? 'out-of-stock' : '';
+
+                if (existing) {
+                    // update quantity
+                    const qtySpan = existing.querySelector('.dash-qty');
+                    if (qtySpan) qtySpan.textContent = item.quantity;
+                    if (outClass) existing.classList.add('out-of-stock'); else existing.classList.remove('out-of-stock');
+                } else {
+                    // prepend new item
+                    const ul = resultsDiv.querySelector('ul');
+                    const li = document.createElement('li');
+                    li.className = `dash-item ${outClass}`;
+                    li.setAttribute('data-item-id', item.item_id);
+                    li.style.padding = '10px 0';
+                    li.style.borderBottom = '1px solid #eee';
+                    li.innerHTML = `<strong>${escapeHtml(item.item_name)}</strong> <span style="color:#2196f3;">(${escapeHtml(item.item_id)})</span><br>
+                        Quantity: <span class="dash-qty" data-item-id="${escapeHtml(item.item_id)}">${item.quantity}</span> | Rate: ${escapeHtml(item.rate)}`;
+                    if (ul) ul.insertBefore(li, ul.firstChild);
+                }
+            });
+        } catch (err) {
+            console.error('Realtime update fetch failed:', err);
+        }
+    }
+}
 });
 
 // ==================== INITIALIZATION FUNCTIONS ====================
