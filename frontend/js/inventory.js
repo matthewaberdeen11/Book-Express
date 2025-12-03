@@ -8,7 +8,6 @@ let currentDetailItem = null;
 
 // Initialize inventory page
 document.addEventListener('DOMContentLoaded', function() {
-    initializeAuth();
     loadInventory();
     setupEventListeners();
     setupRealTimeUpdates();
@@ -49,16 +48,23 @@ function debounceSearch(query) {
 async function loadInventory() {
     try {
         const response = await fetch('/backend/api/catalogue/list.php');
-        if (!response.ok) throw new Error('Failed to load inventory');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
         const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load inventory');
+        }
+        
         allItems = data.items || [];
         filteredItems = [...allItems];
         displayInventory(filteredItems);
         updateSelectionCount();
     } catch (error) {
         console.error('Error loading inventory:', error);
-        showErrorMessage('Failed to load inventory');
+        const tbody = document.getElementById('inventoryBody');
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--danger-color);">Error: ${escapeHtml(error.message)}</td></tr>`;
     }
 }
 
@@ -69,16 +75,18 @@ function applyFilters() {
     const categoryFilter = document.getElementById('categoryFilter').value;
     
     filteredItems = allItems.filter(item => {
+        const itemTitle = (item.item_name || item.title || '').toLowerCase();
+        const itemId = (item.isbn || item.item_id || '').toLowerCase();
+        
         const matchesSearch = !searchTerm || 
-            item.item_name?.toLowerCase().includes(searchTerm) ||
-            item.isbn?.toLowerCase().includes(searchTerm) ||
-            item.title?.toLowerCase().includes(searchTerm);
+            itemTitle.includes(searchTerm) ||
+            itemId.includes(searchTerm);
         
         const matchesGrade = !gradeFilter || 
-            item.grade_level?.toLowerCase().includes(gradeFilter.toLowerCase());
+            (item.grade_level || '').toLowerCase().includes(gradeFilter.toLowerCase());
         
         const matchesCategory = !categoryFilter || 
-            item.category?.toLowerCase().includes(categoryFilter.toLowerCase());
+            (item.category || '').toLowerCase().includes(categoryFilter.toLowerCase());
         
         return matchesSearch && matchesGrade && matchesCategory;
     });
@@ -97,27 +105,35 @@ function displayInventory(items) {
     }
     
     tbody.innerHTML = items.map(item => {
-        const stockClass = item.quantity_on_hand === 0 || item.quantity === 0 ? 'out-of-stock' : 
-                          (item.quantity_on_hand < 10 || item.quantity < 10) ? 'low-stock' : '';
-        const stockStatus = (item.quantity_on_hand || item.quantity) === 0 ? 'Out of Stock' : '';
+        // Handle both 'title' and 'item_name' fields
+        const itemTitle = item.item_name || item.title;
+        const itemId = item.book_id || item.item_id;
+        const source = item.source || 'manual';
+        const gradeLevel = item.grade_level || 'N/A';
+        const stock = item.quantity_on_hand || 0;
+        const price = item.unit_price || 0;
+        
+        const stockClass = stock === 0 ? 'out-of-stock' : 
+                          (stock < 10) ? 'low-stock' : '';
+        const stockStatus = stock === 0 ? 'Out of Stock' : '';
         
         return `
             <tr class="${stockClass}">
                 <td>
-                    <input type="checkbox" class="item-checkbox" data-item-id="${item.book_id || item.item_id}" 
+                    <input type="checkbox" class="item-checkbox" data-item-id="${itemId}" 
                            onchange="updateSelection()">
                 </td>
-                <td class="item-title" onclick="showItemDetail('${item.source || 'manual'}', ${item.book_id || item.item_id}, '${escapeHtml(item.item_name || item.title)}')">
-                    ${escapeHtml(item.item_name || item.title)}
+                <td class="item-title" onclick="showItemDetail('${source}', ${itemId}, '${escapeHtml(itemTitle)}')">
+                    ${escapeHtml(itemTitle)}
                 </td>
-                <td>${escapeHtml(item.grade_level || 'N/A')}</td>
+                <td>${escapeHtml(gradeLevel)}</td>
                 <td class="stock-cell">
-                    <span class="stock-quantity">${item.quantity_on_hand || item.quantity || 0}</span>
+                    <span class="stock-quantity">${stock}</span>
                     ${stockStatus ? `<span class="out-of-stock-badge">${stockStatus}</span>` : ''}
                 </td>
-                <td>${formatPrice(item.unit_price || item.price)}</td>
+                <td>${formatPrice(price)}</td>
                 <td>
-                    <button class="action-btn edit-btn" title="Edit" onclick="editItem(${item.book_id || item.item_id}, '${item.source || 'manual'}')">
+                    <button class="action-btn edit-btn" title="Edit" onclick="editItem(${itemId}, '${source}')">
                         <i class="fas fa-edit"></i>
                     </button>
                 </td>
