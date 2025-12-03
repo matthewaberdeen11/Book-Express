@@ -1012,3 +1012,551 @@ body {
     flex-direction: column;
     overflow-y: auto;
 }
+
+/* ==================== INVENTORY PAGE ==================== */
+
+.inventory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.inventory-header h1 {
+    font-size: 28px;
+    font-weight: 600;
+}
+
+.inventory-container {
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    padding: 20px;
+}
+
+.inventory-toolbar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.search-section {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-section .search-icon {
+    position: absolute;
+    left: 12px;
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+.search-box {
+    width: 100%;
+    padding: 10px 12px 10px 36px;
+    background-color: rgba(0, 102, 255, 0.1);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.search-box:focus {
+    border-color: var(--primary-color);
+    background-color: rgba(0, 102, 255, 0.15);
+}
+
+.search-box::placeholder {
+    color: var(--text-secondary);
+}
+
+.filter-section {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.filter-select {
+    padding: 10px 12px;
+    background-color: rgba(0, 102, 255, 0.1);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 180px;
+}
+
+.filter-select:focus {
+    border-color: var(--primary-color);
+    background-color: rgba(0, 102, 255, 0.15);
+}
+
+.filter-select option {
+    background-color: var(--dark-bg);
+    color: var(--text-primary);
+}
+
+.bulk-actions-btn {
+    padding: 10px 16px;
+    background-color: rgba(0, 102, 255, 0.2);
+    border: 1px solid var(--primary-color);
+    border-radius: 8px;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.bulk-actions-btn:hover {
+    background-color: rgba(0, 102, 255, 0.3);
+}
+
+.selection-info {
+    padding: 12px;
+    background-color: rgba(0, 102, 255, 0.05);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.inventory-table-wrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.inventory-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.inventory-table thead {
+    background-color: rgba(0, 102, 255, 0.05);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.inventory-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.inventory-table tbody tr {
+    border-bottom: 1px solid rgba(42, 58, 82, 0.5);
+    transition: background-color 0.15s ease;
+}
+
+.inventory-table tbody tr:hover {
+    background-color: rgba(0, 102, 255, 0.05);
+}
+
+.inventory-table tbody tr.out-of-stock {
+    opacity: 0.7;
+}
+
+.inventory-table td {
+    padding: 12px;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.item-title {
+    cursor: pointer;
+    color: var(--primary-color);
+    transition: color 0.15s ease;
+    font-weight: 500;
+}
+
+.item-title:hover {
+    color: #0052cc;
+    text-decoration: underline;
+}
+
+.stock-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stock-quantity {
+    font-weight: 600;
+}
+
+.out-of-stock-badge {
+    background-color: var(--danger-color);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.inventory-table tr.low-stock .stock-quantity {
+    color: var(--warning-color);
+}
+
+.inventory-table tr.out-of-stock .stock-quantity {
+    color: var(--danger-color);
+}
+
+.action-btn {
+    padding: 6px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 12px;
+}
+
+.edit-btn {
+    background-color: rgba(0, 102, 255, 0.2);
+    color: var(--primary-color);
+}
+
+.edit-btn:hover {
+    background-color: rgba(0, 102, 255, 0.3);
+}
+
+input[type="checkbox"] {
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: 5% auto;
+    padding: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: slideIn 0.3s ease;
+}
+
+.modal-content.modal-large {
+    max-width: 700px;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.close {
+    color: var(--text-secondary);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    border: none;
+    background: none;
+    padding: 0;
+}
+
+.close:hover {
+    color: var(--text-primary);
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    font-size: 20px;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    background-color: rgba(0, 102, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.form-group input:focus {
+    border-color: var(--primary-color);
+    background-color: rgba(0, 102, 255, 0.1);
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+}
+
+.btn-primary,
+.btn-secondary {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary:hover {
+    background-color: #0052cc;
+}
+
+.btn-secondary {
+    background-color: rgba(139, 146, 173, 0.2);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background-color: rgba(139, 146, 173, 0.3);
+}
+
+.btn-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Detail Modal Styles */
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.detail-header h2 {
+    font-size: 20px;
+    margin: 0 0 8px 0;
+}
+
+.source-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.source-badge.csv {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.source-badge.manual {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.detail-section {
+    margin-bottom: 24px;
+}
+
+.detail-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(42, 58, 82, 0.5);
+    font-size: 13px;
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 120px;
+}
+
+.detail-value {
+    color: var(--text-primary);
+    text-align: right;
+    flex: 1;
+    padding-left: 12px;
+}
+
+.detail-value.out-of-stock {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+.detail-value.low-stock {
+    color: var(--warning-color);
+}
+
+.history-list {
+    background-color: rgba(0, 102, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 100px;
+}
+
+.history-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    background-color: rgba(0, 102, 255, 0.05);
+    border-radius: 6px;
+    font-size: 12px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.history-date {
+    color: var(--text-secondary);
+    min-width: 140px;
+}
+
+.history-change {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    min-width: 50px;
+    text-align: center;
+}
+
+.history-change.positive {
+    background-color: var(--success-color);
+}
+
+.history-change.negative {
+    background-color: var(--danger-color);
+}
+
+.history-reason {
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.history-loading {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 20px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .inventory-toolbar {
+        flex-direction: column;
+    }
+    
+    .search-section {
+        min-width: 100%;
+    }
+    
+    .filter-section {
+        width: 100%;
+    }
+    
+    .filter-select {
+        min-width: 100%;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 20% auto;
+    }
+    
+    .detail-row {
+        flex-direction: column;
+        gap: 6px;
+    }
+    
+    .detail-label {
+        min-width: auto;
+        margin-bottom: 4px;
+    }
+    
+    .detail-value {
+        text-align: left;
+    }
+}
