@@ -74,12 +74,15 @@ try {
     $initial_quantity = max(0, intval($input['initial_quantity'] ?? 0));
     $reorder_level = intval($input['reorder_level'] ?? 10);
     
+    // Generate item_id from ISBN (used for CSV imports and tracking)
+    $item_id = strtoupper(str_replace('-', '', $input['isbn'])); // Remove dashes from ISBN
+    
     $stmt = $conn->prepare('
-        INSERT INTO inventory (book_id, quantity_on_hand, reorder_level)
-        VALUES (?, ?, ?)
+        INSERT INTO inventory (book_id, item_id, item_name, quantity_on_hand, reorder_level)
+        VALUES (?, ?, ?, ?, ?)
     ');
     
-    $stmt->execute([$book_id, $initial_quantity, $reorder_level]);
+    $stmt->execute([$book_id, $item_id, $input['title'], $initial_quantity, $reorder_level]);
     
     //log creation in audit log
     $stmt = $conn->prepare('

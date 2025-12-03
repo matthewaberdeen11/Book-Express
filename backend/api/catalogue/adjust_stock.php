@@ -42,9 +42,21 @@ try {
     $reason = $input['reason'];
     $notes = $input['notes'] ?? '';
     
-    //validate reason
-    $valid_reasons = ['Damaged', 'Customer Return', 'Stock Correction', 'Theft/Loss', 'Other'];
-    if (!in_array($reason, $valid_reasons)) {
+    //validate reason - accept predefined reasons
+    $valid_reasons = [
+        'Stock Count Discrepancy',
+        'Damaged/Defective',
+        'Lost/Missing',
+        'Theft/Shrinkage',
+        'Inventory Adjustment',
+        'Return from Customer',
+        'Physical Stocktake',
+        'System Correction',
+        'Expired/Obsolete'
+    ];
+    
+    // Check if reason starts with "Other:" (custom reason)
+    if (!in_array($reason, $valid_reasons) && !preg_match('/^Other:/', $reason)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Invalid reason']);
         exit;

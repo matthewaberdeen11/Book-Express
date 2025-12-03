@@ -84,6 +84,20 @@ function setupCatalogueEventListeners() {
         adjustForm.addEventListener('submit', handleAdjustSubmit);
     }
     
+    // Reason dropdown change
+    const reasonSelect = document.getElementById('reason');
+    if (reasonSelect) {
+        reasonSelect.removeEventListener('change', toggleOtherReasonField);
+        reasonSelect.addEventListener('change', toggleOtherReasonField);
+    }
+    
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.removeEventListener('keyup', filterCatalogue);
+        searchInput.addEventListener('keyup', filterCatalogue);
+    }
+    
     // Close modals when clicking outside
     window.onclick = function(event) {
         if (event.target.classList.contains('modal')) {
@@ -92,12 +106,74 @@ function setupCatalogueEventListeners() {
     };
 }
 
+// Toggle other reason field
+function toggleOtherReasonField() {
+    const reasonSelect = document.getElementById('reason');
+    const otherReasonGroup = document.getElementById('otherReasonGroup');
+    
+    if (reasonSelect.value === 'Other') {
+        otherReasonGroup.style.display = 'block';
+        document.getElementById('otherReason').focus();
+    } else {
+        otherReasonGroup.style.display = 'none';
+    }
+}
+
+// Filter catalogue items based on search input
+function filterCatalogue() {
+    const searchInput = document.getElementById('searchInput');
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const tableRows = document.querySelectorAll('#catalogueBody tr');
+    let visibleCount = 0;
+    
+    tableRows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = false;
+        
+        // Search in ISBN, Title, Author, and Category columns
+        for (let i = 0; i < Math.min(4, cells.length); i++) {
+            const cellText = cells[i].textContent.toLowerCase();
+            if (cellText.includes(searchTerm)) {
+                match = true;
+                break;
+            }
+        }
+        
+        if (searchTerm === '' || match) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Show message if no results found
+    if (visibleCount === 0 && searchTerm !== '') {
+        const tbody = document.getElementById('catalogueBody');
+        const existingMessage = tbody.querySelector('.no-results');
+        if (!existingMessage) {
+            const noResultsRow = document.createElement('tr');
+            noResultsRow.className = 'no-results';
+            noResultsRow.innerHTML = `<td colspan="7" style="text-align: center; padding: 20px; color: #8b92ad;">No items found matching "${escapeHtml(searchTerm)}"</td>`;
+            tbody.appendChild(noResultsRow);
+        }
+    } else {
+        // Remove no results message if search is cleared
+        const noResultsRow = document.querySelector('.no-results');
+        if (noResultsRow) {
+            noResultsRow.remove();
+        }
+    }
+}
+
 // Show create modal
 function showCreateModal() {
     document.getElementById('modalTitle').textContent = 'Add New Item';
     document.getElementById('itemForm').reset();
     document.getElementById('book_id').value = '';
     document.getElementById('isbn').disabled = false;
+    document.getElementById('initial_quantity').value = '0';
+    document.getElementById('initialQuantityGroup').style.display = 'block';
     document.getElementById('itemModal').style.display = 'block';
 }
 
@@ -120,6 +196,7 @@ function editItem(bookId) {
                     document.getElementById('unit_price').value = item.unit_price;
                     document.getElementById('reorder_level').value = item.reorder_level || 10;
                     document.getElementById('description').value = item.description || '';
+                    document.getElementById('initialQuantityGroup').style.display = 'none';
                     
                     document.getElementById('itemModal').style.display = 'block';
                 }
@@ -166,7 +243,7 @@ function handleItemSubmit(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            closeModal('itemModal');
+            document.getElementById('itemModal').style.display = 'none';
             loadCatalogue();
             alert(data.message || 'Item saved successfully');
         } else {
@@ -182,10 +259,12 @@ function handleItemSubmit(e) {
 // Show adjust stock modal
 function showAdjustModal(bookId, currentStock, title) {
     document.getElementById('adjust_book_id').value = bookId;
-    document.getElementById('current_stock').textContent = currentStock;
-    document.getElementById('adjust_book_title').textContent = title;
+    document.getElementById('current_quantity').value = currentStock;
+    document.getElementById('itemNameDisplay').textContent = title;
     document.getElementById('adjustForm').reset();
+    document.getElementById('current_quantity').value = currentStock;
     document.getElementById('adjustModal').style.display = 'block';
+    updateAdjustmentLabel();
 }
 
 // Handle stock adjustment submission
@@ -193,11 +272,33 @@ function handleAdjustSubmit(e) {
     e.preventDefault();
     
     const bookId = document.getElementById('adjust_book_id').value;
-    const adjustment = parseInt(document.getElementById('adjustment_amount').value);
-    const reason = document.getElementById('reason').value;
-    const notes = document.getElementById('notes').value;
+    const adjustmentType = document.getElementById('adjustment_type').value;
+    const quantity = parseInt(document.getElementById('quantity').value);
+    const currentStock = parseInt(document.getElementById('current_quantity').value);
+    let reason = document.getElementById('reason').value;
     
-    if (!confirm(`Confirm stock adjustment of ${adjustment > 0 ? '+' : ''}${adjustment}?`)) {
+    // If "Other" is selected, append the custom reason
+    if (reason === 'Other') {
+        const otherReason = document.getElementById('otherReason').value.trim();
+        if (otherReason) {
+            reason = 'Other: ' + otherReason;
+        } else {
+            alert('Please provide details for the "Other" reason');
+            return;
+        }
+    }
+    
+    let adjustmentAmount = 0;
+    
+    if (adjustmentType === 'add') {
+        adjustmentAmount = quantity;
+    } else if (adjustmentType === 'remove') {
+        adjustmentAmount = -quantity;
+    } else if (adjustmentType === 'set') {
+        adjustmentAmount = quantity - currentStock;
+    }
+    
+    if (!confirm(`Confirm stock adjustment of ${adjustmentAmount > 0 ? '+' : ''}${adjustmentAmount}?`)) {
         return;
     }
     
@@ -208,15 +309,14 @@ function handleAdjustSubmit(e) {
         },
         body: JSON.stringify({
             book_id: bookId,
-            adjustment_amount: adjustment,
-            reason: reason,
-            notes: notes
+            adjustment_amount: adjustmentAmount,
+            reason: reason
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            closeModal('adjustModal');
+            document.getElementById('adjustModal').style.display = 'none';
             loadCatalogue();
             alert(`Stock adjusted: ${data.old_stock} → ${data.new_stock}`);
         } else {
@@ -253,53 +353,56 @@ function viewHistory(bookId, title) {
 
 // Display history items
 function displayHistory(history) {
-    const historyList = document.getElementById('historyList');
+    const historyBody = document.getElementById('historyBody');
     
     if (!history || history.length === 0) {
-        historyList.innerHTML = '<p style="text-align: center;">No history available</p>';
+        historyBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No history available</td></tr>';
         return;
     }
     
-    let html = '<div class="history-items">';
+    let html = '';
     history.forEach(item => {
-        const date = new Date(item.timestamp).toLocaleString();
-        let details = '';
+        let dateStr = 'N/A';
+        let changeStr = 'N/A';
+        let typeStr = item.action_type || 'N/A';
+        let reasonStr = 'N/A';
         
-        switch(item.action_type) {
-            case 'CREATE':
-                details = 'Item created';
-                break;
-            case 'UPDATE':
-                details = `Updated ${item.field_changed}: "${item.old_value}" → "${item.new_value}"`;
-                break;
-            case 'ADJUST_STOCK':
+        // Format date
+        if (item.timestamp) {
+            try {
+                const date = new Date(item.timestamp);
+                dateStr = date.toLocaleString();
+            } catch (e) {
+                dateStr = item.timestamp;
+            }
+        }
+        
+        // Format change and reason based on action type
+        if (item.action_type === 'ADJUST_STOCK') {
+            if (item.quantity_change) {
                 const change = parseInt(item.quantity_change);
-                details = `Stock adjusted: ${item.old_value} → ${item.new_value} (${change > 0 ? '+' : ''}${change})`;
-                if (item.adjustment_reason) {
-                    details += `<br><strong>Reason:</strong> ${item.adjustment_reason}`;
-                }
-                if (item.notes) {
-                    details += `<br><strong>Notes:</strong> ${escapeHtml(item.notes)}`;
-                }
-                break;
+                changeStr = `${change > 0 ? '+' : ''}${change}`;
+            }
+            reasonStr = item.adjustment_reason || 'N/A';
+        } else if (item.action_type === 'UPDATE') {
+            changeStr = `${item.old_value} → ${item.new_value}`;
+            reasonStr = item.field_changed || 'N/A';
+        } else if (item.action_type === 'CREATE') {
+            changeStr = 'Item created';
+            reasonStr = 'Initial creation';
         }
         
         html += `
-            <div class="history-item">
-                <div class="history-item-header">
-                    <span class="history-action">${item.action_type}</span>
-                    <span class="history-date">${date}</span>
-                </div>
-                <div class="history-item-details">
-                    ${details}
-                    <br><small>By: ${escapeHtml(item.username)}</small>
-                </div>
-            </div>
+            <tr>
+                <td>${escapeHtml(dateStr)}</td>
+                <td>${escapeHtml(changeStr)}</td>
+                <td>${escapeHtml(typeStr)}</td>
+                <td>${escapeHtml(reasonStr)}</td>
+            </tr>
         `;
     });
-    html += '</div>';
     
-    historyList.innerHTML = html;
+    historyBody.innerHTML = html;
 }
 
 // Close modal

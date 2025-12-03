@@ -2,7 +2,7 @@
 -- Created: 2025-12-02
 -- Description: Adds audit logging for catalogue changes and price history tracking
 
--- Catalogue audit log table
+-- Audit log table
 CREATE TABLE IF NOT EXISTS catalogue_audit_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
     book_id INT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS catalogue_audit_log (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Price history table
+--price history table
 CREATE TABLE IF NOT EXISTS price_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
     book_id INT NOT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS price_history (
     FOREIGN KEY (changed_by) REFERENCES users(id)
 );
 
--- Create indexes for better query performance
+--create indexes for performance
 CREATE INDEX idx_audit_book_id ON catalogue_audit_log(book_id);
 CREATE INDEX idx_audit_timestamp ON catalogue_audit_log(timestamp);
 CREATE INDEX idx_price_history_book_id ON price_history(book_id);
