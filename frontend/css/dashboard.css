@@ -679,6 +679,61 @@ body {
     line-height: 1.6;
 }
 
+/* ==================== HISTORY TABLE STYLING ==================== */
+.history-table-wrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--dark-bg);
+}
+
+.history-table thead {
+    background: var(--border-color);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.history-table thead th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    white-space: nowrap;
+}
+
+.history-table thead th:last-child {
+    border-right: none;
+}
+
+.history-table tbody td {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 14px;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.history-table tbody td:last-child {
+    border-right: none;
+}
+
+.history-table tbody tr:hover {
+    background: rgba(0, 102, 255, 0.05);
+}
+
+.history-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 /* ==================== CATALOGUE MANAGEMENT ==================== */
 .catalogue-header {
     display: flex;
