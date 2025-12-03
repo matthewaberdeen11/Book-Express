@@ -71,6 +71,11 @@
                 <div class="catalogue-container">
                     <div class="search-section">
                         <input type="text" id="searchInput" class="search-box" placeholder="Search items...">
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-filter="all" onclick="filterBySource('all')">All Items</button>
+                            <button class="filter-btn" data-filter="csv" onclick="filterBySource('csv')">CSV Imported</button>
+                            <button class="filter-btn" data-filter="manual" onclick="filterBySource('manual')">Manually Added</button>
+                        </div>
                     </div>
                     
                     <div class="catalogue-table-wrapper">
@@ -166,6 +171,7 @@
             <h2>Adjust Stock</h2>
             <form id="adjustForm">
                 <input type="hidden" id="adjust_book_id">
+                <input type="hidden" id="adjust_source" value="manual">
                 <p id="itemNameDisplay" style="margin-bottom: 15px; color: #8b92ad;"></p>
                 
                 <div class="form-group">

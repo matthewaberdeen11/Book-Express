@@ -1,5 +1,11 @@
 ﻿// ==================== CATALOGUE MANAGEMENT ====================
 
+// Global catalogue data
+let catalogueData = {
+    items: [],
+    currentFilter: 'all'
+};
+
 // Initialize catalogue section
 function initCatalogue() {
     console.log('Initializing catalogue...');
@@ -13,7 +19,9 @@ function loadCatalogue() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                displayCatalogue(data.items);
+                // Store items with their source already set from backend
+                catalogueData.items = data.items;
+                displayCatalogue(catalogueData.items);
             } else {
                 console.error('Error loading catalogue:', data.error);
                 document.getElementById('catalogueBody').innerHTML = 
@@ -31,33 +39,48 @@ function loadCatalogue() {
 function displayCatalogue(items) {
     const tbody = document.getElementById('catalogueBody');
     
-    if (!items || items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No items in catalogue</td></tr>';
+    // Apply current filter
+    let filteredItems = items;
+    if (catalogueData.currentFilter === 'csv') {
+        filteredItems = items.filter(item => item.source === 'csv');
+    } else if (catalogueData.currentFilter === 'manual') {
+        filteredItems = items.filter(item => item.source === 'manual');
+    }
+    
+    if (!filteredItems || filteredItems.length === 0) {
+        const filterText = catalogueData.currentFilter === 'csv' ? 'No CSV imported items' :
+                          catalogueData.currentFilter === 'manual' ? 'No manually added items' : 'No items in catalogue';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px;">${filterText}</td></tr>`;
         return;
     }
     
     let html = '';
-    items.forEach(item => {
+    filteredItems.forEach(item => {
         const stock = parseInt(item.quantity_on_hand) || 0;
         const stockClass = stock === 0 ? 'out-of-stock' : (stock < 10 ? 'low-stock' : '');
         const stockWarning = stock < 10 && stock > 0 ? '<i class="fas fa-exclamation-triangle" style="color: #f59e0b; margin-left: 5px;"></i>' : '';
+        const sourceBadge = item.source === 'csv' ? '<span class="source-badge csv">CSV</span>' : '<span class="source-badge manual">Manual</span>';
+        
+        // Use book_id for manual items, item_id for CSV items
+        const itemId = item.source === 'csv' ? item.item_id : item.book_id;
+        const displayIsbn = item.isbn || item.item_id || 'N/A';
         
         html += `
-            <tr>
-                <td>${escapeHtml(item.isbn)}</td>
+            <tr data-source="${item.source}">
+                <td>${sourceBadge} ${escapeHtml(displayIsbn)}</td>
                 <td>${escapeHtml(item.title)}</td>
                 <td>${escapeHtml(item.author || 'N/A')}</td>
                 <td>${escapeHtml(item.category || 'N/A')}</td>
                 <td>$${parseFloat(item.unit_price).toFixed(2)}</td>
                 <td class="${stockClass}">${stock}${stockWarning}</td>
                 <td>
-                    <button class="btn-icon" onclick="editItem(${item.id})" title="Edit">
+                    <button class="btn-icon" onclick="editItem(${escapeHtml(itemId)}, '${item.source}')" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-icon" onclick="showAdjustModal(${item.id}, ${stock}, '${escapeHtml(item.title)}')" title="Adjust Stock">
+                    <button class="btn-icon" onclick="showAdjustModal('${item.source}', ${escapeHtml(itemId)}, ${stock}, '${escapeHtml(item.title)}')" title="Adjust Stock">
                         <i class="fas fa-arrows-alt-v"></i>
                     </button>
-                    <button class="btn-icon" onclick="viewHistory(${item.id}, '${escapeHtml(item.title)}')" title="View History">
+                    <button class="btn-icon" onclick="viewHistory('${item.source}', ${escapeHtml(itemId)}, '${escapeHtml(item.title)}')" title="View History">
                         <i class="fas fa-history"></i>
                     </button>
                 </td>
@@ -119,6 +142,23 @@ function toggleOtherReasonField() {
     }
 }
 
+// Filter catalogue by source (CSV or manual)
+function filterBySource(source) {
+    catalogueData.currentFilter = source;
+    
+    // Update active button
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-filter="${source}"]`).classList.add('active');
+    
+    // Re-display catalogue with filter applied
+    displayCatalogue(catalogueData.items);
+    
+    // Clear search when changing filter
+    document.getElementById('searchInput').value = '';
+}
+
 // Filter catalogue items based on search input
 function filterCatalogue() {
     const searchInput = document.getElementById('searchInput');
@@ -178,15 +218,22 @@ function showCreateModal() {
 }
 
 // Edit item
-function editItem(bookId) {
+function editItem(bookId, source) {
+    // Check if this is a CSV item - show as read-only
+    if (source === 'csv') {
+        alert('CSV imported items cannot be edited directly. Please adjust stock quantities or delete and re-import if needed.');
+        return;
+    }
+    
+    // For manual items, load and edit normally
     fetch('../backend/api/catalogue/list.php')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                const item = data.items.find(i => i.id == bookId);
+                const item = data.items.find(i => i.book_id == bookId && i.source === 'manual');
                 if (item) {
                     document.getElementById('modalTitle').textContent = 'Edit Item';
-                    document.getElementById('book_id').value = item.id;
+                    document.getElementById('book_id').value = item.book_id;
                     document.getElementById('isbn').value = item.isbn;
                     document.getElementById('isbn').disabled = true;
                     document.getElementById('title').value = item.title;
@@ -199,8 +246,14 @@ function editItem(bookId) {
                     document.getElementById('initialQuantityGroup').style.display = 'none';
                     
                     document.getElementById('itemModal').style.display = 'block';
+                } else {
+                    alert('Item not found');
                 }
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading item details');
         });
 }
 
@@ -257,8 +310,16 @@ function handleItemSubmit(e) {
 }
 
 // Show adjust stock modal
-function showAdjustModal(bookId, currentStock, title) {
-    document.getElementById('adjust_book_id').value = bookId;
+function showAdjustModal(source, itemId, currentStock, title) {
+    if (source === 'csv') {
+        // For CSV items, store item_id as string
+        document.getElementById('adjust_book_id').value = itemId;
+        document.getElementById('adjust_source').value = 'csv';
+    } else {
+        // For manual items, store book_id as number
+        document.getElementById('adjust_book_id').value = itemId;
+        document.getElementById('adjust_source').value = 'manual';
+    }
     document.getElementById('current_quantity').value = currentStock;
     document.getElementById('itemNameDisplay').textContent = title;
     document.getElementById('adjustForm').reset();
@@ -272,6 +333,7 @@ function handleAdjustSubmit(e) {
     e.preventDefault();
     
     const bookId = document.getElementById('adjust_book_id').value;
+    const source = document.getElementById('adjust_source').value;
     const adjustmentType = document.getElementById('adjustment_type').value;
     const quantity = parseInt(document.getElementById('quantity').value);
     const currentStock = parseInt(document.getElementById('current_quantity').value);
@@ -309,6 +371,7 @@ function handleAdjustSubmit(e) {
         },
         body: JSON.stringify({
             book_id: bookId,
+            source: source,
             adjustment_amount: adjustmentAmount,
             reason: reason
         })
@@ -330,24 +393,58 @@ function handleAdjustSubmit(e) {
 }
 
 // View adjustment history
-function viewHistory(bookId, title) {
-    document.getElementById('history_book_title').textContent = title;
+function viewHistory(source, itemId, title) {
+    document.getElementById('historyTitle').textContent = title + ' - Stock History';
     document.getElementById('historyModal').style.display = 'block';
     
-    fetch(`../backend/api/catalogue/get_history.php?book_id=${bookId}`)
+    // Use book_id for manual items, item_id for CSV items
+    const queryParam = source === 'csv' ? `item_id=${itemId}` : `book_id=${itemId}`;
+    
+    fetch(`../backend/api/catalogue/get_history.php?${queryParam}`)
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                displayHistory(data.history);
+            if (data.success && data.history) {
+                const historyBody = document.getElementById('historyBody');
+                let html = '';
+                
+                data.history.forEach(record => {
+                    // Parse timestamp properly
+                    const date = new Date(record.timestamp || record.date);
+                    const formattedDate = isNaN(date.getTime()) 
+                        ? (record.timestamp || record.date || 'N/A')
+                        : date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                    
+                    // Format change with +/- prefix
+                    const change = record.quantity_change !== null && record.quantity_change !== undefined
+                        ? (record.quantity_change > 0 ? '+' : '') + record.quantity_change
+                        : 'N/A';
+                    
+                    // Get action type
+                    const type = record.action_type || record.type || 'N/A';
+                    
+                    // Get reason
+                    const reason = record.adjustment_reason || record.reason || 'N/A';
+                    
+                    html += `
+                        <tr>
+                            <td>${escapeHtml(formattedDate)}</td>
+                            <td>${escapeHtml(change)}</td>
+                            <td>${escapeHtml(type)}</td>
+                            <td>${escapeHtml(reason)}</td>
+                        </tr>
+                    `;
+                });
+                
+                historyBody.innerHTML = html || '<tr><td colspan="4" style="text-align: center; padding: 20px;">No history available</td></tr>';
             } else {
-                document.getElementById('historyList').innerHTML = 
-                    '<p style="text-align: center; color: #ef4444;">Error loading history</p>';
+                const historyBody = document.getElementById('historyBody');
+                historyBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No history available</td></tr>';
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('historyList').innerHTML = 
-                '<p style="text-align: center; color: #ef4444;">Failed to load history</p>';
+            console.error('Error loading history:', error);
+            const historyBody = document.getElementById('historyBody');
+            historyBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">Error loading history</td></tr>';
         });
 }
 

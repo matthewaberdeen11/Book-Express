@@ -41,6 +41,7 @@ try {
     $adjustment = intval($input['adjustment_amount']);
     $reason = $input['reason'];
     $notes = $input['notes'] ?? '';
+    $source = $input['source'] ?? 'manual'; // Default to manual if not specified
     
     //validate reason - accept predefined reasons
     $valid_reasons = [
@@ -64,19 +65,34 @@ try {
     
     $conn = get_db_connection();
     
-    //get current stock
-    $stmt = $conn->prepare('
-        SELECT i.quantity_on_hand, b.title
-        FROM inventory i
-        JOIN books b ON i.book_id = b.id
-        WHERE i.book_id = ?
-    ');
-    $stmt->execute([$input['book_id']]);
-    $current = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Get current stock based on source
+    if ($source === 'csv') {
+        // CSV items: query by item_id, get item_name instead of title
+        $stmt = $conn->prepare('
+            SELECT i.quantity_on_hand, i.item_name, i.item_id
+            FROM inventory i
+            WHERE i.item_id = ? AND i.book_id IS NULL
+        ');
+        $stmt->execute([$input['book_id']]);
+        $current = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($current) {
+            $current['title'] = $current['item_name'];
+        }
+    } else {
+        // Manual items: query by book_id with books table join
+        $stmt = $conn->prepare('
+            SELECT i.quantity_on_hand, b.title, i.book_id
+            FROM inventory i
+            JOIN books b ON i.book_id = b.id
+            WHERE i.book_id = ?
+        ');
+        $stmt->execute([$input['book_id']]);
+        $current = $stmt->fetch(PDO::FETCH_ASSOC);
+    }
     
     if (!$current) {
         http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Book not found']);
+        echo json_encode(['success' => false, 'error' => 'Item not found']);
         exit;
     }
     
@@ -96,19 +112,27 @@ try {
     //start transaction
     $conn->beginTransaction();
     
-    //update inventory (SR-001)
-    $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE book_id = ?');
-    $stmt->execute([$new_stock, $input['book_id']]);
+    //update inventory based on source
+    if ($source === 'csv') {
+        $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE item_id = ?');
+        $stmt->execute([$new_stock, $input['book_id']]);
+    } else {
+        $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE book_id = ?');
+        $stmt->execute([$new_stock, $input['book_id']]);
+    }
     
-    //log adjustment (SR-002)
+    //log adjustment
     $stmt = $conn->prepare('
         INSERT INTO catalogue_audit_log 
         (book_id, user_id, action_type, old_value, new_value, quantity_change, adjustment_reason, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ');
     
+    // For CSV items, book_id will be NULL, which is fine for the audit log
+    $book_id_for_log = ($source === 'csv') ? null : $input['book_id'];
+    
     $stmt->execute([
-        $input['book_id'],
+        $book_id_for_log,
         $user['id'],
         'ADJUST_STOCK',
         $current_stock,

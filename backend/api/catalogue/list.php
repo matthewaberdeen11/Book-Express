@@ -16,10 +16,11 @@ if (!SessionManager::isAuthenticated()) {
 try {
     $conn = get_db_connection();
     
-    //get all catalogue items with inventory
+    //get manually added items (from books table)
     $stmt = $conn->prepare('
         SELECT 
-            b.id,
+            b.id as book_id,
+            NULL as item_id,
             b.isbn,
             b.title,
             b.author,
@@ -28,10 +29,32 @@ try {
             b.description,
             b.unit_price,
             COALESCE(i.quantity_on_hand, 0) as quantity_on_hand,
-            i.reorder_level
+            i.reorder_level,
+            "manual" as source
         FROM books b
         LEFT JOIN inventory i ON b.id = i.book_id
-        ORDER BY b.title ASC
+        WHERE i.book_id IS NOT NULL
+        
+        UNION ALL
+        
+        -- get CSV imported items (from inventory table only)
+        SELECT 
+            NULL as book_id,
+            i.item_id,
+            "" as isbn,
+            i.item_name as title,
+            "" as author,
+            "" as publisher,
+            i.product_type as category,
+            "" as description,
+            CAST(i.rate AS DECIMAL(10, 2)) as unit_price,
+            COALESCE(i.quantity, 0) as quantity_on_hand,
+            0 as reorder_level,
+            "csv" as source
+        FROM inventory i
+        WHERE i.book_id IS NULL AND i.item_id IS NOT NULL
+        
+        ORDER BY title ASC
     ');
     
     $stmt->execute();
