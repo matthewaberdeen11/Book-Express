@@ -56,11 +56,15 @@ try {
     $inStock = $stockResult['in_stock'] ?? 0;
     $outOfStock = $stockResult['out_of_stock'] ?? 0;
     
-    // Get low stock alerts (quantity < 5 as threshold)
-    $stmt = $conn->prepare('SELECT COUNT(*) as low_stock FROM inventory WHERE item_id IS NOT NULL AND quantity > 0 AND quantity < 5');
+// Get low stock alerts where reorder has NOT been initiated
+    $stmt = $conn->prepare('
+        SELECT COUNT(*) as alert_count
+        FROM low_stock_alerts
+        WHERE status NOT IN ("reorder_initiated", "resolved")
+    ');
     $stmt->execute();
-    $lowStockResult = $stmt->fetch();
-    $lowStockCount = $lowStockResult['low_stock'] ?? 0;
+    $alertResult = $stmt->fetch();
+    $activeAlertCount = (int)($alertResult['alert_count'] ?? 0);
     
     // Get total inventory value (price * quantity for all items with quantity > 0)
     $stmt = $conn->prepare('
@@ -76,7 +80,7 @@ try {
         'totalItems' => (int)$totalItems,
         'inStock' => (int)$inStock,
         'outOfStock' => (int)$outOfStock,
-        'lowStockCount' => (int)$lowStockCount,
+        'lowStockCount' => (int)$activeAlertCount,
         'inventoryValue' => $totalValue
     ]);
     
