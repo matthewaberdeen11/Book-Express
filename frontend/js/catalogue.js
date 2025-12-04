@@ -339,6 +339,12 @@ function handleAdjustSubmit(e) {
     const currentStock = parseInt(document.getElementById('current_quantity').value);
     let reason = document.getElementById('reason').value;
     
+    // Validate reason is selected
+    if (!reason || reason === '') {
+        alert('Adjustment reason is required');
+        return;
+    }
+    
     // If "Other" is selected, append the custom reason
     if (reason === 'Other') {
         const otherReason = document.getElementById('otherReason').value.trim();
@@ -358,6 +364,13 @@ function handleAdjustSubmit(e) {
         adjustmentAmount = -quantity;
     } else if (adjustmentType === 'set') {
         adjustmentAmount = quantity - currentStock;
+    }
+    
+    // Validate stock won't go negative
+    const newStock = currentStock + adjustmentAmount;
+    if (newStock < 0) {
+        alert(`Cannot reduce stock below zero.\nCurrent Stock: ${currentStock}\nAttempted Adjustment: ${adjustmentAmount}\nWould Result in: ${newStock}`);
+        return;
     }
     
     if (!confirm(`Confirm stock adjustment of ${adjustmentAmount > 0 ? '+' : ''}${adjustmentAmount}?`)) {

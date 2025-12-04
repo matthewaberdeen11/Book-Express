@@ -124,15 +124,18 @@ try {
     //log adjustment
     $stmt = $conn->prepare('
         INSERT INTO catalogue_audit_log 
-        (book_id, user_id, action_type, old_value, new_value, quantity_change, adjustment_reason, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (book_id, item_id, user_id, action_type, old_value, new_value, quantity_change, adjustment_reason, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ');
     
-    // For CSV items, book_id will be NULL, which is fine for the audit log
+    // For CSV items, book_id will be NULL, item_id will be set
+    // For manual items, item_id will be NULL, book_id will be set
     $book_id_for_log = ($source === 'csv') ? null : $input['book_id'];
+    $item_id_for_log = ($source === 'csv') ? $input['book_id'] : null;
     
     $stmt->execute([
         $book_id_for_log,
+        $item_id_for_log,
         $user['id'],
         'ADJUST_STOCK',
         $current_stock,

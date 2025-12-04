@@ -20,37 +20,65 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 try {
-    if (empty($_GET['book_id'])) {
+    $book_id = $_GET['book_id'] ?? null;
+    $item_id = $_GET['item_id'] ?? null;
+    
+    if (empty($book_id) && empty($item_id)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Book ID is required']);
+        echo json_encode(['success' => false, 'error' => 'Book ID or Item ID is required']);
         exit;
     }
     
     $conn = get_db_connection();
     
-    //get audit log entries
-    $stmt = $conn->prepare('
-        SELECT 
-            cal.id,
-            cal.action_type,
-            cal.field_changed,
-            cal.old_value,
-            cal.new_value,
-            cal.quantity_change,
-            cal.adjustment_reason,
-            cal.notes,
-            cal.timestamp,
-            u.username,
-            b.title as book_title
-        FROM catalogue_audit_log cal
-        JOIN users u ON cal.user_id = u.id
-        JOIN books b ON cal.book_id = b.id
-        WHERE cal.book_id = ?
-        ORDER BY cal.timestamp DESC
-        LIMIT 100
-    ');
+    if (!empty($item_id)) {
+        // For CSV items (item_id provided)
+        $stmt = $conn->prepare('
+            SELECT 
+                cal.id,
+                cal.action_type,
+                cal.field_changed,
+                cal.old_value,
+                cal.new_value,
+                cal.quantity_change,
+                cal.adjustment_reason,
+                cal.notes,
+                cal.timestamp,
+                u.username,
+                i.item_name as book_title
+            FROM catalogue_audit_log cal
+            JOIN users u ON cal.user_id = u.id
+            LEFT JOIN inventory i ON cal.item_id = i.item_id
+            WHERE cal.item_id = ?
+            ORDER BY cal.timestamp DESC
+            LIMIT 100
+        ');
+        $stmt->execute([$item_id]);
+    } else {
+        // For manual items (book_id provided)
+        $stmt = $conn->prepare('
+            SELECT 
+                cal.id,
+                cal.action_type,
+                cal.field_changed,
+                cal.old_value,
+                cal.new_value,
+                cal.quantity_change,
+                cal.adjustment_reason,
+                cal.notes,
+                cal.timestamp,
+                u.username,
+                b.title as book_title
+            FROM catalogue_audit_log cal
+            JOIN users u ON cal.user_id = u.id
+            LEFT JOIN books b ON cal.book_id = b.id
+            WHERE cal.book_id = ?
+            ORDER BY cal.timestamp DESC
+            LIMIT 100
+        ');
+        $stmt->execute([$book_id]);
+    }
     
-    $stmt->execute([$_GET['book_id']]);
     $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     echo json_encode([
