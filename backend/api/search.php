@@ -96,7 +96,9 @@ function handleSearch($conn, $page, $offset, $limit) {
         $result['unit_price'] = $result['rate'];
         $result['quantity_on_hand'] = intval($result['quantity']);
         $result['author'] = 'N/A';
-        $result['category'] = 'N/A';
+        $result['isbn'] = $result['item_id'];
+        $result['grade_level'] = extractGradeLevel($result['item_name']);
+        $result['category'] = extractCategory($result['item_name']);
         $result['source'] = 'csv';
     }
 
@@ -182,5 +184,36 @@ function handleGetAdjustmentHistory($conn) {
         'history' => [],
         'current' => $item
     ]);
+}
+
+function extractGradeLevel($itemName) {
+    // Extract grade level from item name (e.g., "Grade One" -> "1", "K3" -> "K3")
+    if (preg_match('/Grade\s+(One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve)/i', $itemName, $matches)) {
+        $gradeText = strtolower($matches[1]);
+        $gradeMap = [
+            'one' => '1', 'two' => '2', 'three' => '3', 'four' => '4',
+            'five' => '5', 'six' => '6', 'seven' => '7', 'eight' => '8',
+            'nine' => '9', 'ten' => '10', 'eleven' => '11', 'twelve' => '12'
+        ];
+        return $gradeMap[$gradeText] ?? $matches[1];
+    }
+    if (preg_match('/K[0-9]/', $itemName, $matches)) {
+        return $matches[0];
+    }
+    return 'N/A';
+}
+
+function extractCategory($itemName) {
+    // Extract subject/category from item name
+    if (stripos($itemName, 'Mathematics') !== false || stripos($itemName, 'Redicovery') !== false) {
+        return 'Mathematics';
+    }
+    if (stripos($itemName, 'Phonics') !== false) {
+        return 'Language Arts';
+    }
+    if (stripos($itemName, 'Island Jamaica') !== false || stripos($itemName, 'Learn Together') !== false) {
+        return 'Social Studies';
+    }
+    return 'General';
 }
 ?>

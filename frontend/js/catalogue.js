@@ -666,18 +666,19 @@ function displayCatalogueSearchResults(results) {
     
     let html = '';
     results.forEach(item => {
-        const stockClass = item.quantity > 0 ? '' : 'out-of-stock';
-        const stockStatus = item.quantity > 0 ? 
-            `<span style="color: #16a34a;">${item.quantity} in stock</span>` : 
+        const quantity = item.quantity_on_hand || item.quantity || 0;
+        const stockClass = quantity > 0 ? '' : 'out-of-stock';
+        const stockStatus = quantity > 0 ? 
+            `<span style="color: #16a34a;">${quantity} in stock</span>` : 
             `<span style="color: #ef4444;">Out of stock</span>`;
         
         html += `
             <tr class="${stockClass}" style="cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f5f5f5';" onmouseout="this.style.backgroundColor='transparent';">
                 <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.item_id || '')}</td>
-                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.item_name || '')}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.title || item.item_name || '')}</td>
                 <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.grade_level || '-')}</td>
-                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.subject_category || '-')}</td>
-                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">$${item.rate || '0.00'}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.category || '-')}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">$${item.unit_price || item.rate || '0.00'}</td>
                 <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${stockStatus}</td>
                 <td>
                     <button class="btn-small" onclick="editItem(${item.item_id})" style="padding: 4px 8px; background: #0066ff; color: white; border: none; border-radius: 4px; cursor: pointer;">
