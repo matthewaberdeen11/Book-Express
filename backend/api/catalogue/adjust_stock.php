@@ -67,9 +67,9 @@ try {
     
     // Get current stock based on source
     if ($source === 'csv') {
-        // CSV items: query by item_id, get item_name instead of title
+        // CSV items: query by item_id, get item_name instead of title (use 'quantity' column for CSV)
         $stmt = $conn->prepare('
-            SELECT i.quantity_on_hand, i.item_name, i.item_id
+            SELECT i.quantity as quantity_on_hand, i.item_name, i.item_id
             FROM inventory i
             WHERE i.item_id = ? AND i.book_id IS NULL
         ');
@@ -114,7 +114,8 @@ try {
     
     //update inventory based on source
     if ($source === 'csv') {
-        $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE item_id = ?');
+        // CSV items use 'quantity' column, not 'quantity_on_hand'
+        $stmt = $conn->prepare('UPDATE inventory SET quantity = ? WHERE item_id = ?');
         $stmt->execute([$new_stock, $input['book_id']]);
     } else {
         $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE book_id = ?');
