@@ -117,9 +117,46 @@ function setupCatalogueEventListeners() {
     // Search functionality
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
-        searchInput.removeEventListener('keyup', filterCatalogue);
-        searchInput.addEventListener('keyup', filterCatalogue);
+        let searchTimeout;
+        searchInput.removeEventListener('keyup', handleCatalogueSearch);
+        searchInput.addEventListener('keyup', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                handleCatalogueSearch();
+            }, 300);
+        });
     }
+    
+    // Search button
+    const searchButton = document.getElementById('catalogueSearchButton');
+    if (searchButton) {
+        searchButton.removeEventListener('click', handleCatalogueSearch);
+        searchButton.addEventListener('click', handleCatalogueSearch);
+    }
+    
+    // Grade filter
+    const gradeFilter = document.getElementById('gradeFilter');
+    if (gradeFilter) {
+        gradeFilter.removeEventListener('change', handleCatalogueSearch);
+        gradeFilter.addEventListener('change', handleCatalogueSearch);
+    }
+    
+    // Subject filter
+    const subjectFilter = document.getElementById('subjectFilter');
+    if (subjectFilter) {
+        subjectFilter.removeEventListener('change', handleCatalogueSearch);
+        subjectFilter.addEventListener('change', handleCatalogueSearch);
+    }
+    
+    // In stock only filter
+    const inStockOnly = document.getElementById('inStockOnly');
+    if (inStockOnly) {
+        inStockOnly.removeEventListener('change', handleCatalogueSearch);
+        inStockOnly.addEventListener('change', handleCatalogueSearch);
+    }
+    
+    // Load filter options
+    loadFilterOptions();
     
     // Close modals when clicking outside
     window.onclick = function(event) {
@@ -526,4 +563,127 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Load grade and subject filter options
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('../backend/api/search.php?action=search&limit=1000', {
+            credentials: 'same-origin'
+        });
+        
+        const data = await response.json();
+        
+        if (data.results) {
+            // Extract unique grades and subjects
+            const grades = new Set();
+            const subjects = new Set();
+            
+            data.results.forEach(item => {
+                if (item.grade_level) grades.add(item.grade_level);
+                if (item.subject_category) subjects.add(item.subject_category);
+            });
+            
+            // Populate grade filter
+            const gradeFilter = document.getElementById('gradeFilter');
+            grades.forEach(grade => {
+                const option = document.createElement('option');
+                option.value = grade;
+                option.textContent = grade;
+                gradeFilter.appendChild(option);
+            });
+            
+            // Populate subject filter
+            const subjectFilter = document.getElementById('subjectFilter');
+            subjects.forEach(subject => {
+                const option = document.createElement('option');
+                option.value = subject;
+                option.textContent = subject;
+                subjectFilter.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+// Handle catalogue search with API
+async function handleCatalogueSearch() {
+    const searchTerm = document.getElementById('searchInput').value.trim();
+    const grade = document.getElementById('gradeFilter').value;
+    const subject = document.getElementById('subjectFilter').value;
+    const inStockOnly = document.getElementById('inStockOnly').checked;
+    
+    try {
+        // Build query parameters
+        let query = '../backend/api/search.php?action=search&limit=1000';
+        if (searchTerm) {
+            query += `&q=${encodeURIComponent(searchTerm)}`;
+        }
+        if (grade) {
+            query += `&grade=${encodeURIComponent(grade)}`;
+        }
+        if (subject) {
+            query += `&subject=${encodeURIComponent(subject)}`;
+        }
+        
+        const response = await fetch(query, {
+            credentials: 'same-origin'
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Filter by in-stock if checkbox is selected
+        let results = data.results || [];
+        if (inStockOnly) {
+            results = results.filter(item => item.quantity > 0);
+        }
+        
+        displayCatalogueSearchResults(results);
+        
+    } catch (error) {
+        console.error('Error searching catalogue:', error);
+        document.getElementById('catalogueBody').innerHTML = 
+            `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #ef4444;">Error: ${error.message}</td></tr>`;
+    }
+}
+
+// Display catalogue search results in table
+function displayCatalogueSearchResults(results) {
+    const tbody = document.getElementById('catalogueBody');
+    
+    if (!results || results.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No items found</td></tr>';
+        return;
+    }
+    
+    let html = '';
+    results.forEach(item => {
+        const stockClass = item.quantity > 0 ? '' : 'out-of-stock';
+        const stockStatus = item.quantity > 0 ? 
+            `<span style="color: #16a34a;">${item.quantity} in stock</span>` : 
+            `<span style="color: #ef4444;">Out of stock</span>`;
+        
+        html += `
+            <tr class="${stockClass}">
+                <td>${escapeHtml(item.item_id || '')}</td>
+                <td>${escapeHtml(item.item_name || '')}</td>
+                <td>${escapeHtml(item.grade_level || '-')}</td>
+                <td>${escapeHtml(item.subject_category || '-')}</td>
+                <td>$${item.rate || '0.00'}</td>
+                <td>${stockStatus}</td>
+                <td>
+                    <button class="btn-small" onclick="editItem(${item.item_id})" style="padding: 4px 8px; background: #0066ff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Edit
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
 }
