@@ -70,7 +70,7 @@ function setupSidebarToggle() {
         }
     });
     
-    // Handle window resize - ensure sidebar is visible on large screens
+    //Handle window resize by ensuring sidebar is visible on large screens
     window.addEventListener('resize', function() {
         if (window.innerWidth > 768) {
             sidebar.classList.remove('collapsed');

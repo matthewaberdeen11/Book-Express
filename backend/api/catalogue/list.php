@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 //list all catalogue items with inventory
 header('Content-Type: application/json');
 
