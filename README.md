@@ -77,7 +77,7 @@ Book-Express/
 
 - Matthew Aberdeen (Team Lead)
 - Gabria (Developer)
-- [Team members to be added]
+- Delano Sewell (Developer)
 
 ## Contributing
 
