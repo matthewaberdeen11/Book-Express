@@ -1,0 +1,44 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Uploads directory (sensitive user files)
+/uploads/*
+!/uploads/.gitkeep
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.code-workspace
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# PHP/Composer
+vendor/
+composer.lock
+
+# System files
+*.log
+.cache/
+
+# Config files with secrets
+/config/database.php
+/config/app.php
+
+# Temporary files
+/tmp/
+/temp/
+*.tmp
