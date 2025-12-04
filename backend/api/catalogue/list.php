@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../auth/SessionManager.php';
+require_once __DIR__ . '/../../utils/GradeExtractor.php';
 
 SessionManager::init();
 
@@ -16,49 +17,37 @@ if (!SessionManager::isAuthenticated()) {
 try {
     $conn = get_db_connection();
     
-    //get manually added items (from books table)
+    // Get all inventory items
     $stmt = $conn->prepare('
         SELECT 
-            b.id as book_id,
-            NULL as item_id,
-            b.isbn,
-            b.title,
-            b.author,
-            b.publisher,
-            b.category,
-            b.description,
-            b.unit_price,
-            COALESCE(i.quantity_on_hand, 0) as quantity_on_hand,
-            i.reorder_level,
-            "manual" as source
-        FROM books b
-        LEFT JOIN inventory i ON b.id = i.book_id
-        WHERE i.book_id IS NOT NULL
-        
-        UNION ALL
-        
-        -- get CSV imported items (from inventory table only)
-        SELECT 
-            NULL as book_id,
             i.item_id,
-            "" as isbn,
             i.item_name as title,
-            "" as author,
-            "" as publisher,
-            i.product_type as category,
-            "" as description,
-            CAST(i.rate AS DECIMAL(10, 2)) as unit_price,
-            COALESCE(i.quantity, 0) as quantity_on_hand,
-            0 as reorder_level,
-            "csv" as source
+            i.rate,
+            COALESCE(i.quantity_on_hand, 0) as quantity_on_hand,
+            COALESCE(i.quantity_on_hand, 0) as quantity,
+            COALESCE(i.reorder_level, 0) as reorder_level,
+            COALESCE(i.grade_level, "") as grade_level,
+            COALESCE(f.id IS NOT NULL, 0) as is_favourite,
+            i.product_type as category
         FROM inventory i
-        WHERE i.book_id IS NULL AND i.item_id IS NOT NULL
-        
-        ORDER BY title ASC
+        LEFT JOIN favourites f ON i.item_id = f.item_id
+        ORDER BY i.item_name ASC
     ');
     
     $stmt->execute();
     $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Parse and format items
+    foreach ($items as &$item) {
+        // Parse rate (remove "JMD" prefix if present)
+        $parsed_rate = preg_replace('/[^\d.]/', '', $item['rate']);
+        $item['rate'] = is_numeric($parsed_rate) ? round((float)$parsed_rate, 2) : 0.00;
+        
+        // Extract grade level if missing
+        if (empty($item['grade_level']) && !empty($item['title'])) {
+            $item['grade_level'] = GradeExtractor::extractGrade($item['title']) ?? '';
+        }
+    }
     
     echo json_encode([
         'success' => true,
@@ -67,6 +56,7 @@ try {
     
 } catch (Exception $e) {
     http_response_code(500);
+    header('Content-Type: application/json');
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()

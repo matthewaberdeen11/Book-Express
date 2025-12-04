@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Initialize dashboard with user data
     initializeDashboard(user);
-    // Load dashboard statistics
+    // Load dashboard statistics and chart
     loadDashboardData();
     // Set up navigation
     setupNavigation();
@@ -90,12 +90,135 @@ function closeSidebarMobile() {
     }
 }
 
+// ==================== FAVOURITES LOADING ====================
+function loadFavourites() {
+    fetch('../backend/api/catalogue/favourites.php?action=list')
+        .then(async response => {
+            const data = await parseJsonOrText(response);
+            if (data && data.success) {
+                displayFavourites(data.items);
+            } else {
+                console.error('Error loading favourites:', data.error || data);
+            }
+        })
+        .catch(error => console.error('Error loading favourites:', error));
+}
+
+function displayFavourites(items) {
+    const container = document.getElementById('favouritesList');
+    if (!container) return;
+    
+    if (!items || items.length === 0) {
+        container.innerHTML = '<p style="color: #8b92ad; text-align: center; padding: 10px;">No favourites yet. Add items from the inventory to get started.</p>';
+        return;
+    }
+    
+    let html = '';
+    items.forEach(item => {
+        const outOfStock = item.stock === 0 ? ' out-of-stock' : '';
+        const stockDisplay = item.stock === 0 ? 'Out of Stock' : `Stock: ${item.stock}`;
+        html += `
+            <div class="favourite-item${outOfStock}">
+                <div class="favourite-info">
+                    <p class="favourite-title">${escapeHtml(item.title || item.item_name)}</p>
+                    <p class="favourite-stock">${stockDisplay}</p>
+                </div>
+                <button class="btn-favourite-remove" data-book-id="${item.book_id || ''}" data-item-id="${item.item_id || ''}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function removeFavourite(bookId, itemId, button) {
+    const data = {};
+    if (bookId) data.book_id = bookId;
+    if (itemId) data.item_id = itemId;
+    
+    // Get the card element to remove it immediately
+    const cardElement = button.closest('.favourite-item');
+    
+    fetch('../backend/api/catalogue/favourites.php?action=remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+        .then(async response => {
+            const data = await parseJsonOrText(response);
+            if (data && data.success) {
+                // Remove the card immediately with fade-out animation
+                if (cardElement) {
+                    cardElement.style.opacity = '0';
+                    cardElement.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        cardElement.remove();
+                    }, 300);
+                }
+            } else {
+                console.error('Error removing favourite:', data.error || data);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+// Event delegation to handle favourite remove button click
+document.addEventListener('click', function(event) {
+    const btn = event.target.closest('.btn-favourite-remove');
+    if (btn) {
+        const bookId = btn.dataset.bookId || '';
+        const itemId = btn.dataset.itemId || '';
+        removeFavourite(bookId, itemId, btn);
+    }
+});
+
+// Helper to parse JSON responses safely even if server returns HTML error pages
+async function parseJsonOrText(response) {
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+    if (contentType.includes('application/json')) {
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return { success: false, error: 'Invalid JSON response' };
+        }
+    }
+    // If not JSON, attempt JSON parse; otherwise return text as error
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        return { success: false, error: text };
+    }
+}
+
+function viewFavouriteItem(bookId, itemId) {
+    // Navigate to catalogue page for now
+    window.location.href = 'catalogue.html';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // ==================== DATA LOADING ====================
 function loadDashboardData() {
-    fetch('../backend/api/dashboard.php')
-        .then(response => response.json())
+    loadFavourites();
+    
+    fetch('../backend/api/dashboard/analytics.php?metric=overview')
+        .then(async response => {
+            const text = await response.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Invalid JSON response:', text);
+                return { success: false, error: 'Invalid response' };
+            }
+        })
         .then(data => {
-            if (data.error) {
+            if (data.error || !data.success) {
                 console.error('Error loading dashboard data:', data.error);
                 return;
             }
@@ -104,18 +227,25 @@ function loadDashboardData() {
         .catch(err => console.error('Failed to load dashboard data:', err));
 }
 
-function updateDashboardCards(data) {
+function updateDashboardCards(response) {
+    if (!response.success || !response.data || !response.data.overview) {
+        console.error('Invalid response structure:', response);
+        return;
+    }
+    
+    const data = response.data.overview;
+    
     // Update total items
-    document.getElementById('totalItems').textContent = data.totalItems || 0;
+    document.getElementById('totalItems').textContent = data.total_items || 0;
     
     // Update in/out of stock
-    document.getElementById('stockStatus').textContent = `${data.inStock || 0} / ${data.outOfStock || 0}`;
+    document.getElementById('stockStatus').textContent = `${data.in_stock || 0} / ${data.out_of_stock || 0}`;
     
     // Update low stock alerts
-    document.getElementById('lowStockCount').textContent = data.lowStockCount || 0;
+    document.getElementById('lowStockCount').textContent = data.low_stock_alerts || 0;
     
     // Update inventory value in JMD format
-    const value = parseFloat(data.inventoryValue) || 0;
+    const value = parseFloat(data.total_value) || 0;
     const formatted = new Intl.NumberFormat('en-JM', { 
         style: 'currency', 
         currency: 'JMD',
@@ -135,7 +265,9 @@ async function logout() {
             }
         });
         
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch (e) { data = { success: false, error: text }; }
         
         if (data.success) {
             // Redirect to login page

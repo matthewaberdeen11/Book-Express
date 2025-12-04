@@ -1,4 +1,4 @@
-﻿-- Migration 004: Add Catalogue Audit Log and Price History
+-- Migration 004: Add Catalogue Audit Log and Price History
 -- Created: 2025-12-02
 -- Description: Adds audit logging for catalogue changes and price history tracking
 

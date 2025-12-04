@@ -147,11 +147,10 @@ function processInitialImport($rows, $conn, $summary) {
                 continue;
             }
 
-            // Insert new item with quantity = 0 (fresh inventory)
-            // book_id is NULL because CSV imports are independent of books table
+            // Insert new item with quantity_on_hand = 0 (fresh inventory)
             $stmt = $conn->prepare('
-                INSERT INTO inventory (book_id, item_id, item_name, rate, product_type, status, quantity) 
-                VALUES (NULL, ?, ?, ?, ?, ?, 0)
+                INSERT INTO inventory (item_id, item_name, rate, product_type, status, quantity_on_hand) 
+                VALUES (?, ?, ?, ?, ?, 0)
             ');
             $stmt->execute([$item_id, $item_name, $rate, $product_type, $status]);
             $summary['successful']++;
@@ -202,7 +201,7 @@ function processDailyImport($rows, $conn, $summary) {
 
         // Find item in inventory
         try {
-            $stmt = $conn->prepare('SELECT id, rate, quantity FROM inventory WHERE item_id = ?');
+            $stmt = $conn->prepare('SELECT id, rate, quantity, quantity_sold FROM inventory WHERE item_id = ?');
             $stmt->execute([$item_id]);
             $item = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -227,13 +226,14 @@ function processDailyImport($rows, $conn, $summary) {
                 }
             }
 
-            // Update quantity - deduct sales
+            // Update quantity - deduct sales AND accumulate quantity_sold
             $new_quantity = max(0, $item['quantity'] - $quantity_sold);
-            $stmt = $conn->prepare('UPDATE inventory SET quantity = ? WHERE id = ?');
-            $stmt->execute([$new_quantity, $item['id']]);
+            $new_quantity_sold = ($item['quantity_sold'] ?? 0) + $quantity_sold;
+            $stmt = $conn->prepare('UPDATE inventory SET quantity = ?, quantity_sold = ? WHERE id = ?');
+            $stmt->execute([$new_quantity, $new_quantity_sold, $item['id']]);
             
             $summary['successful']++;
-            error_log("Row $idx - SUCCESS: Updated qty from {$item['quantity']} to $new_quantity");
+            error_log("Row $idx - SUCCESS: Updated qty from {$item['quantity']} to $new_quantity, accumulated sold to $new_quantity_sold");
 
         } catch (PDOException $e) {
             $error = $e->getMessage();

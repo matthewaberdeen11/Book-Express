@@ -1,5 +1,5 @@
 ﻿<?php
-//update catalogue item details
+//update catalogue item details (supports both manual books and CSV items)
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../config/database.php';
@@ -16,13 +16,13 @@ if (!SessionManager::isAuthenticated()) {
 $user = SessionManager::getUser();
 
 //check permissions
-if (!in_array($user['role'], ['admin', 'staff'])) {
+if (!in_array($user['role'], ['admin', 'staff', 'manager'])) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Insufficient permissions']);
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed']);
     exit;
@@ -31,181 +31,100 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 try {
     $input = json_decode(file_get_contents('php://input'), true);
     
-    $source = $input['source'] ?? 'manual';
+    $item_id = $input['item_id'] ?? null;
     
-    // Handle CSV items differently
-    if ($source === 'csv') {
-        if (empty($input['item_id'])) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Item ID is required']);
-            exit;
-        }
-        
-        $conn = get_db_connection();
-        
-        // Get current inventory item details
-        $stmt = $conn->prepare('SELECT * FROM inventory WHERE item_id = ? AND book_id IS NULL');
-        $stmt->execute([$input['item_id']]);
-        $current = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$current) {
-            http_response_code(404);
-            echo json_encode(['success' => false, 'error' => 'Item not found']);
-            exit;
-        }
-        
-        // Track changes for CSV items
-        $changes = [];
-        $update_parts = [];
-        $update_values = [];
-        
-        // CSV items can update: item_name (title), product_type (category), rate (unit_price)
-        if (isset($input['title']) && $input['title'] != $current['item_name']) {
-            $update_parts[] = "item_name = ?";
-            $update_values[] = $input['title'];
-            $changes['item_name'] = [
-                'old' => $current['item_name'],
-                'new' => $input['title']
-            ];
-        }
-        
-        if (isset($input['category']) && $input['category'] != $current['product_type']) {
-            $update_parts[] = "product_type = ?";
-            $update_values[] = $input['category'];
-            $changes['product_type'] = [
-                'old' => $current['product_type'],
-                'new' => $input['category']
-            ];
-        }
-        
-        if (isset($input['unit_price']) && $input['unit_price'] != $current['rate']) {
-            $update_parts[] = "rate = ?";
-            $update_values[] = $input['unit_price'];
-            $changes['rate'] = [
-                'old' => $current['rate'],
-                'new' => $input['unit_price']
-            ];
-        }
-        
-        // Update inventory item if there are changes
-        if (!empty($update_parts)) {
-            $update_values[] = $input['item_id'];
-            $sql = 'UPDATE inventory SET ' . implode(', ', $update_parts) . ' WHERE item_id = ? AND book_id IS NULL';
-            $stmt = $conn->prepare($sql);
-            $stmt->execute($update_values);
-            
-            // Log changes in audit log
-            foreach ($changes as $field => $change) {
-                $stmt = $conn->prepare('
-                    INSERT INTO catalogue_audit_log 
-                    (item_id, user_id, action_type, field_changed, old_value, new_value)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ');
-                
-                $stmt->execute([
-                    $input['item_id'],
-                    $user['id'],
-                    'UPDATE',
-                    $field,
-                    $change['old'],
-                    $change['new']
-                ]);
-            }
-        }
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'CSV item updated successfully',
-            'changes' => count($changes)
-        ]);
-        exit;
-    }
-    
-    // Handle manual items (existing logic)
-    if (empty($input['book_id'])) {
+    if (empty($item_id)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Book ID is required']);
+        echo json_encode(['success' => false, 'error' => 'item_id is required']);
         exit;
     }
     
     $conn = get_db_connection();
     
-    //get current book details
-    $stmt = $conn->prepare('SELECT * FROM books WHERE id = ?');
-    $stmt->execute([$input['book_id']]);
+    // Get current item
+    $stmt = $conn->prepare('SELECT * FROM inventory WHERE item_id = ?');
+    $stmt->execute([$item_id]);
     $current = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$current) {
         http_response_code(404);
-        echo json_encode(['success' => false, 'error' => 'Book not found']);
+        echo json_encode(['success' => false, 'error' => 'Item not found']);
         exit;
     }
     
-    //start transaction
     $conn->beginTransaction();
     
-    //track changes
-    $changes = [];
-    $fields_to_update = ['title', 'author', 'publisher', 'category', 'description', 'unit_price'];
+    // Track changes
     $update_parts = [];
     $update_values = [];
+    $price_changed = false;
     
-    foreach ($fields_to_update as $field) {
-        if (isset($input[$field]) && $input[$field] != $current[$field]) {
-            $update_parts[] = "$field = ?";
-            $update_values[] = $input[$field];
-            $changes[$field] = [
-                'old' => $current[$field],
-                'new' => $input[$field]
-            ];
-        }
+    // Parse current rate (remove "JMD" prefix if present)
+    $current_rate_numeric = floatval(preg_replace('/[^\d.]/', '', $current['rate'] ?? '0'));
+    $old_price = $current_rate_numeric;
+    $new_price = $current_rate_numeric;
+    
+    if (isset($input['item_name']) && $input['item_name'] != $current['item_name']) {
+        $update_parts[] = 'item_name = ?';
+        $update_values[] = $input['item_name'];
+    }
+    if (isset($input['grade_level']) && $input['grade_level'] != $current['grade_level']) {
+        $update_parts[] = 'grade_level = ?';
+        $update_values[] = $input['grade_level'];
+    }
+    if (isset($input['rate']) && floatval($input['rate']) != $current_rate_numeric) {
+        $update_parts[] = 'rate = ?';
+        $update_values[] = $input['rate'];
+        $price_changed = true;
+        $new_price = floatval($input['rate']);
     }
     
-    //update book if there are changes
+    // Update inventory if there are changes
     if (!empty($update_parts)) {
-        $update_values[] = $input['book_id'];
-        $sql = 'UPDATE books SET ' . implode(', ', $update_parts) . ' WHERE id = ?';
+        $update_values[] = $item_id;
+        $sql = 'UPDATE inventory SET ' . implode(', ', $update_parts) . ' WHERE item_id = ?';
         $stmt = $conn->prepare($sql);
         $stmt->execute($update_values);
-        
-        //log changes in audit log
-        foreach ($changes as $field => $change) {
-            $stmt = $conn->prepare('
-                INSERT INTO catalogue_audit_log 
-                (book_id, user_id, action_type, field_changed, old_value, new_value)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ');
-            
-            $stmt->execute([
-                $input['book_id'],
-                $user['id'],
-                'UPDATE',
-                $field,
-                $change['old'],
-                $change['new']
-            ]);
-            
-            //track price changes separately
-            if ($field === 'unit_price') {
-                $stmt = $conn->prepare('
-                    INSERT INTO price_history (book_id, old_price, new_price, changed_by)
-                    VALUES (?, ?, ?, ?)
-                ');
-                
-                $stmt->execute([
-                    $input['book_id'],
-                    $change['old'],
-                    $change['new'],
-                    $user['id']
-                ]);
-            }
-        }
     }
     
-    //update inventory if reorder_level provided
-    if (isset($input['reorder_level'])) {
-        $stmt = $conn->prepare('UPDATE inventory SET reorder_level = ? WHERE book_id = ?');
-        $stmt->execute([$input['reorder_level'], $input['book_id']]);
+    // Log price changes in audit log if price was changed
+    if ($price_changed) {
+        $stmt = $conn->prepare('
+            INSERT INTO catalogue_audit_log 
+            (item_id, user_id, action_type, old_value, new_value, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ');
+        $stmt->execute([
+            $item_id,
+            $user['id'],
+            'PRICE_UPDATE',
+            $old_price,
+            $new_price
+        ]);
+        
+        // Also store in price_history table
+        $stmt = $conn->prepare('
+            INSERT INTO price_history (item_id, old_price, new_price, changed_by, changed_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ');
+        $stmt->execute([$item_id, $old_price, $new_price, $user['id']]);
+    }
+    
+    // Log other updates (non-price) in audit log
+    if (!empty($update_parts) && !$price_changed) {
+        $stmt = $conn->prepare('
+            INSERT INTO catalogue_audit_log 
+            (item_id, user_id, action_type, old_value, new_value, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ');
+        
+        $stmt->execute([
+            $item_id,
+            $user['id'],
+            'UPDATE',
+            json_encode($current),
+            json_encode(['item_name' => $input['item_name'] ?? $current['item_name'], 'grade_level' => $input['grade_level'] ?? $current['grade_level'], 'rate' => $input['rate'] ?? $current['rate']])
+        ]);
     }
     
     $conn->commit();

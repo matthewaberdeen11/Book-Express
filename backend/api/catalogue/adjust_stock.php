@@ -16,7 +16,7 @@ if (!SessionManager::isAuthenticated()) {
 $user = SessionManager::getUser();
 
 //check permissions
-if (!in_array($user['role'], ['admin', 'staff'])) {
+if (!in_array($user['role'], ['admin', 'staff', 'manager'])) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Insufficient permissions']);
     exit;
@@ -31,17 +31,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 try {
     $input = json_decode(file_get_contents('php://input'), true);
     
-    //validate input
-    if (empty($input['book_id']) || !isset($input['adjustment_amount']) || empty($input['reason'])) {
+    // Use item_id only
+    $item_id = $input['item_id'] ?? null;
+    $adjustment_amount = $input['adjustment_amount'] ?? null;
+    $reason = $input['reason'] ?? null;
+    
+    //validate input - check for null/empty string, but allow 0 and negative numbers
+    if (empty($item_id) || $adjustment_amount === null || $adjustment_amount === '' || empty($reason)) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Book ID, adjustment amount, and reason are required']);
+        echo json_encode(['success' => false, 'error' => 'item_id, adjustment_amount, and reason are required']);
         exit;
     }
     
-    $adjustment = intval($input['adjustment_amount']);
-    $reason = $input['reason'];
+    $adjustment = intval($adjustment_amount);
+    
+    // If reason is "Bulk deduct", negate the adjustment
+    if ($reason === 'Bulk deduct') {
+        $adjustment = -$adjustment;
+    }
+    
     $notes = $input['notes'] ?? '';
-    $source = $input['source'] ?? 'manual'; // Default to manual if not specified
     
     //validate reason - accept predefined reasons
     $valid_reasons = [
@@ -53,11 +62,13 @@ try {
         'Return from Customer',
         'Physical Stocktake',
         'System Correction',
-        'Expired/Obsolete'
+        'Expired/Obsolete',
+        'Bulk add',
+        'Bulk deduct'
     ];
     
-    // Check if reason starts with "Other:" (custom reason)
-    if (!in_array($reason, $valid_reasons) && !preg_match('/^Other:/', $reason)) {
+    // Check if reason starts with "Other:" or "Bulk" (custom reason)
+    if (!in_array($reason, $valid_reasons) && !preg_match('/^(Other:|Bulk)/', $reason)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Invalid reason']);
         exit;
@@ -65,30 +76,14 @@ try {
     
     $conn = get_db_connection();
     
-    // Get current stock based on source
-    if ($source === 'csv') {
-        // CSV items: query by item_id, get item_name instead of title (use 'quantity' column for CSV)
-        $stmt = $conn->prepare('
-            SELECT i.quantity as quantity_on_hand, i.item_name, i.item_id
-            FROM inventory i
-            WHERE i.item_id = ? AND i.book_id IS NULL
-        ');
-        $stmt->execute([$input['book_id']]);
-        $current = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($current) {
-            $current['title'] = $current['item_name'];
-        }
-    } else {
-        // Manual items: query by book_id with books table join
-        $stmt = $conn->prepare('
-            SELECT i.quantity_on_hand, b.title, i.book_id
-            FROM inventory i
-            JOIN books b ON i.book_id = b.id
-            WHERE i.book_id = ?
-        ');
-        $stmt->execute([$input['book_id']]);
-        $current = $stmt->fetch(PDO::FETCH_ASSOC);
-    }
+    // Get current stock and grade level
+    $stmt = $conn->prepare('
+        SELECT i.quantity_on_hand, i.item_name, i.grade_level
+        FROM inventory i
+        WHERE i.item_id = ?
+    ');
+    $stmt->execute([$item_id]);
+    $current = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$current) {
         http_response_code(404);
@@ -112,31 +107,53 @@ try {
     //start transaction
     $conn->beginTransaction();
     
-    //update inventory based on source
-    if ($source === 'csv') {
-        // CSV items use 'quantity' column, not 'quantity_on_hand'
-        $stmt = $conn->prepare('UPDATE inventory SET quantity = ? WHERE item_id = ?');
-        $stmt->execute([$new_stock, $input['book_id']]);
-    } else {
-        $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE book_id = ?');
-        $stmt->execute([$new_stock, $input['book_id']]);
+    //update inventory
+    $stmt = $conn->prepare('UPDATE inventory SET quantity_on_hand = ? WHERE item_id = ?');
+    $stmt->execute([$new_stock, $item_id]);
+    
+    // Check if we need to create/update low stock alert
+    $reorder_level = 10; // default
+    $stmt = $conn->prepare('SELECT reorder_level FROM inventory WHERE item_id = ?');
+    $stmt->execute([$item_id]);
+    $inv = $stmt->fetch();
+    if ($inv && $inv['reorder_level']) {
+        $reorder_level = intval($inv['reorder_level']);
+    }
+    
+    // Create or update alert if stock is below reorder level
+    if ($new_stock < $reorder_level && $new_stock > 0) {
+        // Check if alert already exists
+        $stmt = $conn->prepare('SELECT id FROM low_stock_alerts WHERE item_id = ? AND status = "active"');
+        $stmt->execute([$item_id]);
+        $existing_alert = $stmt->fetch();
+        
+        if (!$existing_alert) {
+            // Create new alert with grade_level
+            $stmt = $conn->prepare('
+                INSERT INTO low_stock_alerts (item_id, grade_level, threshold, current_quantity, status, alert_created_at)
+                VALUES (?, ?, ?, ?, "active", NOW())
+            ');
+            $stmt->execute([$item_id, $current['grade_level'], $reorder_level, $new_stock]);
+        } else {
+            // Update existing alert
+            $stmt = $conn->prepare('UPDATE low_stock_alerts SET current_quantity = ? WHERE id = ?');
+            $stmt->execute([$new_stock, $existing_alert['id']]);
+        }
+    } else if ($new_stock >= $reorder_level) {
+        // Clear any active alerts if stock is back above reorder level
+        $stmt = $conn->prepare('UPDATE low_stock_alerts SET status = "cleared", alert_cleared_at = NOW() WHERE item_id = ? AND status = "active"');
+        $stmt->execute([$item_id]);
     }
     
     //log adjustment
     $stmt = $conn->prepare('
         INSERT INTO catalogue_audit_log 
-        (book_id, item_id, user_id, action_type, old_value, new_value, quantity_change, adjustment_reason, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (item_id, user_id, action_type, old_value, new_value, quantity_change, adjustment_reason, notes, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ');
     
-    // For CSV items, book_id will be NULL, item_id will be set
-    // For manual items, item_id will be NULL, book_id will be set
-    $book_id_for_log = ($source === 'csv') ? null : $input['book_id'];
-    $item_id_for_log = ($source === 'csv') ? $input['book_id'] : null;
-    
     $stmt->execute([
-        $book_id_for_log,
-        $item_id_for_log,
+        $item_id,
         $user['id'],
         'ADJUST_STOCK',
         $current_stock,
