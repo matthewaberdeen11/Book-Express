@@ -13,7 +13,7 @@ function initLowStockAlerts() {
 
 // Load all low stock alerts
 function loadLowStockAlerts() {
-    fetch('../backend/api/low-stock/get_alerts.php')
+    fetch('../backend/api/low_stock/get_alerts.php')
         .then(response => response.json())
         .then(data => {
             if (data.success && data.alerts) {
@@ -42,8 +42,11 @@ function displayAlerts(alerts) {
     let html = '';
     alerts.forEach(alert => {
         const statusBadge = getStatusBadge(alert.status);
-        const statusClass = getStatusClass(alert.current_quantity, alert.threshold_value || alert.threshold);
+        const currentQty = Number(alert.current_quantity || alert.current_stock || 0);
+        const threshold = Number(alert.threshold_value || alert.threshold || 0);
+        const statusClass = getStatusClass(currentQty, threshold);
         const alertDate = formatDate(alert.alert_date);
+        const itemId = alert.book_id || alert.item_id || alert.alert_id;
 
         html += `
             <tr>
@@ -51,8 +54,8 @@ function displayAlerts(alerts) {
                     <strong>${escapeHtml(alert.item_name)}</strong>
                     ${alert.isbn ? '<br><small style="color: var(--text-secondary);">ISBN: ' + escapeHtml(alert.isbn) + '</small>' : ''}
                 </td>
-                <td class="${statusClass}">${escapeHtml(String(alert.current_quantity))}</td>
-                <td>${escapeHtml(String(alert.threshold_value || alert.threshold || 'N/A'))}</td>
+                <td class="${statusClass}">${escapeHtml(String(currentQty))}</td>
+                <td>${escapeHtml(String(threshold || 'N/A'))}</td>
                 <td>${statusBadge}</td>
                 <td>${alertDate}</td>
                 <td>
@@ -62,7 +65,7 @@ function displayAlerts(alerts) {
                     <button class="btn-icon" onclick="viewAlertHistory(${alert.alert_id}, '${escapeHtml(alert.item_name)}')" title="View History">
                         <i class="fas fa-history"></i>
                     </button>
-                    <button class="btn-icon" onclick="reorderItem(${alert.book_id})" title="Reorder" style="color: var(--success-color);">
+                    <button class="btn-icon" onclick="reorderItem(${alert.alert_id}, ${itemId})" title="Reorder" style="color: var(--success-color);">
                         <i class="fas fa-shopping-cart"></i>
                     </button>
                 </td>
@@ -72,7 +75,6 @@ function displayAlerts(alerts) {
 
     tbody.innerHTML = html;
 }
-
 
 // Get status badge HTML
 function getStatusBadge(status) {
@@ -122,38 +124,38 @@ function displayError(message) {
 function filterByStatus(status) {
     currentFilter = status;
 
-    // Update active button (use data-status attribute to avoid relying on event)
+    // Update active button
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    const activeBtn = document.querySelector(`.filter-btn[data-status="${status}"]`);
+    const activeBtn = document.querySelector(`.filter-btn[data-filter="${status}"]`);
     if (activeBtn) activeBtn.classList.add('active');
 
     // Filter alerts
     if (status === 'all') {
         filteredAlerts = allAlerts;
     } else if (status === 'critical') {
-        // Prefer the explicit is_critical flag, fallback to quantity logic
         filteredAlerts = allAlerts.filter(alert => {
             if (typeof alert.is_critical !== 'undefined') {
                 return Number(alert.is_critical) === 1;
             }
             const threshold = Number(alert.threshold || alert.threshold_value || 0);
-            const qty = Number(alert.current_quantity || 0);
+            const qty = Number(alert.current_quantity || alert.current_stock || 0);
             return qty === 0 || (threshold > 0 && qty < threshold * 0.5);
         });
     } else if (status === 'acknowledged') {
         filteredAlerts = allAlerts.filter(alert => alert.status === 'acknowledged');
     } else if (status === 'reorder') {
         filteredAlerts = allAlerts.filter(alert => alert.status === 'reorder_initiated');
-    } else if (status === 'out_of_stock') {
-        filteredAlerts = allAlerts.filter(alert => Number(alert.current_quantity) === 0);
     } else {
-        // Generic by-status fallback
         filteredAlerts = allAlerts.filter(alert => alert.status === status);
     }
 
     displayAlerts(filteredAlerts);
+
+    // Clear search when changing filter
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
 }
 
 // Setup search listener
@@ -163,7 +165,6 @@ function setupSearchListener() {
         searchInput.addEventListener('input', function(e) {
             const searchTerm = e.target.value.toLowerCase();
 
-            // Search in the currently filtered set (so we can combine search + filter)
             const base = filteredAlerts && filteredAlerts.length ? filteredAlerts : allAlerts;
 
             const searchFiltered = base.filter(alert => {
@@ -187,7 +188,9 @@ function loadItemsForConfiguration() {
                 if (select) {
                     let options = '<option value="">-- Select an item --</option>';
                     data.items.forEach(item => {
-                        options += `<option value="${item.id}">${escapeHtml(item.title)} ${item.isbn ? '(ISBN: ' + escapeHtml(item.isbn) + ')' : ''}</option>`;
+                        const itemId = item.book_id || item.id;
+                        const itemName = item.title || item.item_name;
+                        options += `<option value="${itemId}">${escapeHtml(itemName)} ${item.isbn ? '(ISBN: ' + escapeHtml(item.isbn) + ')' : ''}</option>`;
                     });
                     select.innerHTML = options;
                 }
@@ -197,7 +200,6 @@ function loadItemsForConfiguration() {
             console.error('Error loading items:', error);
         });
 }
-
 
 // Show configure threshold modal
 function showConfigureModal() {
@@ -222,11 +224,13 @@ function viewAlertHistory(alertId, itemName) {
 
 // Load alert history
 function loadAlertHistory(alertId) {
-    fetch(`../backend/api/low-stock/get_alerts.php?alert_id=${alertId}`)
+    const tbody = document.getElementById('alertHistoryBody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">Loading history...</td></tr>';
+
+    fetch(`../backend/api/low_stock/get_alerts.php?alert_id=${alertId}`)
         .then(response => response.json())
         .then(data => {
-            if (data.success && data.history) {
-                const tbody = document.getElementById('alertHistoryBody');
+            if (data.success && data.history && data.history.length > 0) {
                 let html = '';
 
                 data.history.forEach(record => {
@@ -245,33 +249,25 @@ function loadAlertHistory(alertId) {
                     `;
                 });
 
-                tbody.innerHTML = html || '<tr><td colspan="4" style="text-align: center; padding: 20px;">No history available</td></tr>';
+                tbody.innerHTML = html;
             } else {
-                document.getElementById('alertHistoryBody').innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No history available</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No history available</td></tr>';
             }
         })
         .catch(error => {
             console.error('Error loading alert history:', error);
-            document.getElementById('alertHistoryBody').innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">Error loading history</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">Error loading history</td></tr>';
         });
 }
 
 // Reorder item
-function reorderItem(bookId) {
+function reorderItem(alertId, bookId) {
     if (!confirm('Mark this item for reorder?')) return;
-    // match numeric/string variants
-    const alert = allAlerts.find(a => (a.book_id == bookId || a.item_id == bookId));
-    if (alert) {
-        updateAlertStatus(alert.alert_id || alert.id, 'reorder_initiated', 'Marked for reorder');
-    } else {
-        // If no alert found in memory, still call backend with an alert id = null (no-op) or notify user
-        alert('No open alert found for this item.');
-    }
+    updateAlertStatus(alertId, 'reorder_initiated', 'Marked for reorder');
 }
 
 // Setup form handlers
 function setupFormHandlers() {
-    // Configure threshold form
     const configureForm = document.getElementById('configureForm');
     if (configureForm) {
         configureForm.addEventListener('submit', function(e) {
@@ -280,7 +276,6 @@ function setupFormHandlers() {
         });
     }
 
-    // Status update form
     const statusForm = document.getElementById('statusForm');
     if (statusForm) {
         statusForm.addEventListener('submit', function(e) {
@@ -299,26 +294,40 @@ function submitConfigureThreshold() {
         is_critical: document.getElementById('is_critical').checked ? 1 : 0
     };
 
-    fetch('../backend/api/low-stock/check_thresholds.php', {
+    if (!data.book_id || !data.threshold) {
+        alert('Please select an item and enter a threshold value');
+        return;
+    }
+
+    console.log('Submitting threshold configuration:', data);
+
+    fetch('../backend/api/low_stock/check_thresholds.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
+        console.log('Response data:', data);
         if (data.success) {
             alert('Threshold configured successfully');
             document.getElementById('configureModal').style.display = 'none';
-            loadLowStockAlerts(); // Reload alerts
+            loadLowStockAlerts();
         } else {
-            alert('Error: ' + (data.message || 'Failed to configure threshold'));
+            alert('Error: ' + (data.message || data.error || 'Failed to configure threshold'));
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while configuring threshold');
+        console.error('Full error details:', error);
+        alert('An error occurred while configuring threshold: ' + error.message);
     });
 }
 
@@ -328,6 +337,11 @@ function submitStatusUpdate() {
     const status = document.getElementById('alert_status').value;
     const notes = document.getElementById('status_notes').value;
 
+    if (!status) {
+        alert('Please select a status');
+        return;
+    }
+
     updateAlertStatus(alertId, status, notes);
 }
 
@@ -336,10 +350,10 @@ function updateAlertStatus(alertId, status, notes) {
     const data = {
         alert_id: alertId,
         status: status,
-        notes: notes
+        notes: notes || ''
     };
 
-    fetch('../backend/api/low-stock/update_alert_status.php', {
+    fetch('../backend/api/low_stock/update_alert_status.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -351,7 +365,7 @@ function updateAlertStatus(alertId, status, notes) {
         if (data.success) {
             alert('Alert status updated successfully');
             document.getElementById('statusModal').style.display = 'none';
-            loadLowStockAlerts(); // Reload alerts
+            loadLowStockAlerts();
         } else {
             alert('Error: ' + (data.message || 'Failed to update status'));
         }
