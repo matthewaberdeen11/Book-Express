@@ -1,8 +1,7 @@
 <?php
-// File: search.php - API endpoint for real-time inventory search
+// File: search.php - API endpoint for real-time inventory search from imported CSV
 header('Content-Type: application/json');
 
-require_once '../config/database.php';
 require_once '../auth/SessionManager.php';
 
 SessionManager::init();
@@ -14,7 +13,6 @@ if (!SessionManager::isAuthenticated()) {
 }
 
 try {
-    $conn = get_db_connection();
     $action = $_GET['action'] ?? 'search';
     $page = intval($_GET['page'] ?? 1);
     $limit = intval($_GET['limit'] ?? 50);
@@ -22,16 +20,16 @@ try {
 
     switch ($action) {
         case 'search':
-            handleSearch($conn, $page, $offset, $limit);
+            handleSearch($page, $offset, $limit);
             break;
         case 'getUpdates':
-            handleGetUpdates($conn);
+            handleGetUpdates();
             break;
         case 'getItemDetails':
-            handleGetItemDetails($conn);
+            handleGetItemDetails();
             break;
         case 'getAdjustmentHistory':
-            handleGetAdjustmentHistory($conn);
+            handleGetAdjustmentHistory();
             break;
         default:
             http_response_code(400);
@@ -42,62 +40,75 @@ try {
     echo json_encode(['error' => $e->getMessage()]);
 }
 
-function handleSearch($conn, $page, $offset, $limit) {
+function getImportedItems() {
+    $csvFile = __DIR__ . '/../../assets/Item_sample.csv';
+    $items = [];
+    
+    if (file_exists($csvFile)) {
+        $handle = fopen($csvFile, 'r');
+        if ($handle) {
+            $header = fgetcsv($handle);
+            if ($header) {
+                $header = array_map('trim', $header);
+                while (($row = fgetcsv($handle)) !== false) {
+                    if (!empty(array_filter($row))) {
+                        $item = array_combine($header, $row);
+                        $items[] = $item;
+                    }
+                }
+            }
+            fclose($handle);
+        }
+    }
+    
+    return $items;
+}
+
+function handleSearch($page, $offset, $limit) {
     $searchQuery = $_GET['q'] ?? '';
     $itemId = $_GET['item_id'] ?? '';
-    $gradeLevel = $_GET['grade_level'] ?? '';
-    $subject = $_GET['subject'] ?? '';
     $inStockOnly = isset($_GET['in_stock_only']) && $_GET['in_stock_only'] === 'true';
     
-    $params = [];
-    $conditions = [];
+    $items = getImportedItems();
+    $results = [];
 
-    // Build search conditions
-    if (!empty($searchQuery)) {
-        $conditions[] = "(item_name LIKE ? OR item_id LIKE ?)";
-        $params[] = "%$searchQuery%";
-        $params[] = "%$searchQuery%";
+    // Filter items based on search criteria
+    foreach ($items as $item) {
+        $matches = true;
+        
+        if (!empty($searchQuery)) {
+            $matchesSearch = (stripos($item['Item Name'] ?? '', $searchQuery) !== false ||
+                            stripos($item['Item ID'] ?? '', $searchQuery) !== false);
+            $matches = $matches && $matchesSearch;
+        }
+        
+        if (!empty($itemId)) {
+            $matches = $matches && ($item['Item ID'] ?? '' === $itemId);
+        }
+        
+        if ($inStockOnly) {
+            $quantity = intval($item['Stock'] ?? $item['Quantity'] ?? 0);
+            $matches = $matches && ($quantity > 0);
+        }
+        
+        if ($matches) {
+            $results[] = [
+                'item_id' => $item['Item ID'] ?? '',
+                'item_name' => $item['Item Name'] ?? '',
+                'rate' => floatval($item['Rate'] ?? 0),
+                'quantity' => intval($item['Stock'] ?? $item['Quantity'] ?? 0),
+                'stock_status' => (intval($item['Stock'] ?? 0) > 0) ? 'in_stock' : 'out_of_stock'
+            ];
+        }
     }
-    if (!empty($itemId)) {
-        $conditions[] = "item_id = ?";
-        $params[] = $itemId;
-    }
-    if ($inStockOnly) {
-        $conditions[] = "quantity > 0";
-    }
 
-    $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
-
-    // Count total results
-    $countSql = "SELECT COUNT(*) as total FROM inventory $whereClause";
-    $countStmt = $conn->prepare($countSql);
-    $countStmt->execute($params);
-    $totalResult = $countStmt->fetch();
-    $total = $totalResult['total'] ?? 0;
-
-    // Get paginated results
-    $sql = "SELECT 
-                item_id,
-                item_name,
-                rate,
-                quantity
-            FROM inventory
-            $whereClause
-            ORDER BY item_name ASC
-            LIMIT " . intval($limit) . " OFFSET " . intval($offset);
-
-    $stmt = $conn->prepare($sql);
-    $stmt->execute($params);
-    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Paginate results
+    $total = count($results);
+    $paginatedResults = array_slice($results, $offset, $limit);
     
-    // Add stock_status to results
-    foreach ($results as &$result) {
-        $result['stock_status'] = intval($result['quantity']) > 0 ? 'in_stock' : 'out_of_stock';
-    }
-
     echo json_encode([
         'success' => true,
-        'data' => $results,
+        'data' => $paginatedResults,
         'pagination' => [
             'total' => $total,
             'page' => $page,
@@ -107,7 +118,7 @@ function handleSearch($conn, $page, $offset, $limit) {
     ]);
 }
 
-function handleGetItemDetails($conn) {
+function handleGetItemDetails() {
     $itemId = $_GET['item_id'] ?? '';
     
     if (empty($itemId)) {
@@ -116,67 +127,48 @@ function handleGetItemDetails($conn) {
         return;
     }
 
-    $sql = "SELECT item_id, item_name, rate, quantity
-            FROM inventory WHERE item_id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute([$itemId]);
-    $item = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$item) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Item not found']);
-        return;
-    }
-
-    $stock_status = intval($item['quantity']) > 0 ? 'in_stock' : 'out_of_stock';
-    $item['stock_status'] = $stock_status;
-    echo json_encode($item);
-}
-
-function handleGetUpdates($conn) {
-    $since = $_GET['since'] ?? null;
-    $limit = intval($_GET['limit'] ?? 200);
-
-    if (!$since) {
-        echo json_encode(['results' => [], 'server_time' => time()]);
-        return;
-    }
-
-    try {
-        $sql = "SELECT item_id, item_name, quantity, rate, last_updated 
-                FROM inventory 
-                WHERE last_updated > DATE_SUB(NOW(), INTERVAL ? SECOND)
-                ORDER BY last_updated ASC 
-                LIMIT " . intval($limit);
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$since]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        echo json_encode(['results' => $rows, 'server_time' => time()]);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['error' => $e->getMessage()]);
-    }
-}
-
-function handleGetAdjustmentHistory($conn) {
-    $itemId = $_GET['item_id'] ?? '';
+    $items = getImportedItems();
     
-    if (empty($itemId)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Item ID required']);
-        return;
+    foreach ($items as $item) {
+        if (($item['Item ID'] ?? '') === $itemId) {
+            echo json_encode([
+                'item_id' => $item['Item ID'] ?? '',
+                'item_name' => $item['Item Name'] ?? '',
+                'rate' => floatval($item['Rate'] ?? 0),
+                'quantity' => intval($item['Stock'] ?? 0),
+                'stock_status' => (intval($item['Stock'] ?? 0) > 0) ? 'in_stock' : 'out_of_stock'
+            ]);
+            return;
+        }
     }
+    
+    http_response_code(404);
+    echo json_encode(['error' => 'Item not found']);
+}
 
-    // For now, return basic info since we don't have a change history table
-    $sql = "SELECT item_id, item_name, quantity, last_updated FROM inventory WHERE item_id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute([$itemId]);
-    $item = $stmt->fetch(PDO::FETCH_ASSOC);
+function handleGetUpdates() {
+    $items = getImportedItems();
+    $results = [];
+    
+    foreach ($items as $item) {
+        $results[] = [
+            'item_id' => $item['Item ID'] ?? '',
+            'item_name' => $item['Item Name'] ?? '',
+            'quantity' => intval($item['Stock'] ?? 0),
+            'rate' => floatval($item['Rate'] ?? 0)
+        ];
+    }
+    
+    echo json_encode([
+        'results' => $results,
+        'server_time' => time()
+    ]);
+}
 
+function handleGetAdjustmentHistory() {
     echo json_encode([
         'history' => [],
-        'current' => $item
+        'message' => 'No adjustment history available'
     ]);
 }
 ?>
