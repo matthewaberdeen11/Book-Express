@@ -1,8 +1,7 @@
 <?php
-// File: search.php - API endpoint for real-time inventory search
+// File: search.php - API endpoint for real-time inventory search from CSV
 header('Content-Type: application/json');
 
-require_once '../config/database.php';
 require_once '../auth/SessionManager.php';
 
 SessionManager::init();
@@ -14,7 +13,6 @@ if (!SessionManager::isAuthenticated()) {
 }
 
 try {
-    $conn = get_db_connection();
     $action = $_GET['action'] ?? 'search';
     $page = intval($_GET['page'] ?? 1);
     $limit = intval($_GET['limit'] ?? 50);
@@ -22,16 +20,16 @@ try {
 
     switch ($action) {
         case 'search':
-            handleSearch($conn, $page, $offset, $limit);
+            handleSearch($page, $offset, $limit);
             break;
         case 'getUpdates':
-            handleGetUpdates($conn);
+            handleGetUpdates();
             break;
         case 'getItemDetails':
-            handleGetItemDetails($conn);
+            handleGetItemDetails();
             break;
         case 'getAdjustmentHistory':
-            handleGetAdjustmentHistory($conn);
+            handleGetAdjustmentHistory();
             break;
         default:
             http_response_code(400);
@@ -42,83 +40,98 @@ try {
     echo json_encode(['error' => $e->getMessage()]);
 }
 
-function handleSearch($conn, $page, $offset, $limit) {
+function getImportedBooks() {
+    $csvFile = __DIR__ . '/../../backend/uploads/imported_books.csv';
+    $books = [];
+    
+    if (file_exists($csvFile)) {
+        $handle = fopen($csvFile, 'r');
+        if ($handle) {
+            $header = fgetcsv($handle);
+            if ($header) {
+                $header = array_map('trim', $header);
+                while (($row = fgetcsv($handle)) !== false) {
+                    if (!empty(array_filter($row))) {
+                        $book = array_combine($header, $row);
+                        $books[] = $book;
+                    }
+                }
+            }
+            fclose($handle);
+        }
+    }
+    
+    return $books;
+}
+
+function handleSearch($page, $offset, $limit) {
     $searchQuery = $_GET['q'] ?? '';
     $itemId = $_GET['item_id'] ?? '';
     $gradeLevel = $_GET['grade_level'] ?? '';
     $subject = $_GET['subject'] ?? '';
     $inStockOnly = isset($_GET['in_stock_only']) && $_GET['in_stock_only'] === 'true';
     
-    $params = [];
-    $conditions = ["is_active = 1"];
+    $books = getImportedBooks();
+    $results = [];
 
-    // Build search conditions
-    if (!empty($searchQuery)) {
-        $conditions[] = "(item_name LIKE ? OR item_id LIKE ? OR book_type LIKE ?)";
-        $params[] = "%$searchQuery%";
-        $params[] = "%$searchQuery%";
-        $params[] = "%$searchQuery%";
+    // Filter books based on search criteria
+    foreach ($books as $book) {
+        $matches = true;
+        
+        if (!empty($searchQuery)) {
+            $matchesSearch = (stripos($book['Item Name'] ?? '', $searchQuery) !== false ||
+                            stripos($book['Item ID'] ?? '', $searchQuery) !== false ||
+                            stripos($book['Product Type'] ?? '', $searchQuery) !== false);
+            $matches = $matches && $matchesSearch;
+        }
+        
+        if (!empty($itemId)) {
+            $matches = $matches && ($book['Item ID'] ?? '' === $itemId);
+        }
+        
+        if (!empty($gradeLevel)) {
+            $matches = $matches && (($book['Grade Level'] ?? '') === $gradeLevel);
+        }
+        
+        if (!empty($subject)) {
+            $matches = $matches && (($book['Subject'] ?? '') === $subject);
+        }
+        
+        if ($inStockOnly) {
+            $quantity = intval($book['Stock'] ?? $book['Quantity'] ?? $book['current_stock'] ?? 0);
+            $matches = $matches && ($quantity > 0);
+        }
+        
+        if ($matches) {
+            $results[] = [
+                'item_id' => $book['Item ID'] ?? '',
+                'item_name' => $book['Item Name'] ?? '',
+                'grade_level' => $book['Grade Level'] ?? '',
+                'subject_category' => $book['Subject'] ?? '',
+                'quantity' => intval($book['Stock'] ?? $book['Quantity'] ?? 0),
+                'rate' => floatval($book['Rate'] ?? 0),
+                'stock_status' => (intval($book['Stock'] ?? 0) > 0) ? 'in_stock' : 'out_of_stock'
+            ];
+        }
     }
-    if (!empty($itemId)) {
-        $conditions[] = "item_id = ?";
-        $params[] = $itemId;
-    }
-    if (!empty($gradeLevel)) {
-        $conditions[] = "grade_level = ?";
-        $params[] = $gradeLevel;
-    }
-    if (!empty($subject)) {
-        $conditions[] = "subject_category = ?";
-        $params[] = $subject;
-    }
-    if ($inStockOnly) {
-        $conditions[] = "current_stock > 0";
-    }
 
-    $whereClause = "WHERE " . implode(" AND ", $conditions);
-
-    // Count total results
-    $countSql = "SELECT COUNT(*) as total FROM enhanced_inventory $whereClause";
-    $countStmt = $conn->prepare($countSql);
-    $countStmt->execute($params);
-    $totalResult = $countStmt->fetch();
-    $total = $totalResult['total'] ?? 0;
-
-    // Get paginated results
-    $sql = "SELECT 
-                item_id,
-                item_name,
-                grade_level,
-                subject_category,
-                current_stock AS quantity,
-                selling_price AS rate,
-                stock_status
-            FROM enhanced_inventory
-            $whereClause
-            ORDER BY item_name ASC
-            LIMIT " . intval($limit) . " OFFSET " . intval($offset);
-
-    $stmt = $conn->prepare($sql);
-    $stmt->execute($params);
-    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    // Get unique values for filters
-    $gradeLevels = getUniqueValues($conn, 'grade_level');
-    $subjects = getUniqueValues($conn, 'subject_category');
-
+    // Paginate results
+    $total = count($results);
+    $paginatedResults = array_slice($results, $offset, $limit);
+    
     echo json_encode([
-        'results' => $results,
-        'total' => $total,
-        'page' => $page,
-        'limit' => $limit,
-        'filters' => [
-            'grade_levels' => $gradeLevels,
-            'subjects' => $subjects
+        'success' => true,
+        'data' => $paginatedResults,
+        'pagination' => [
+            'total' => $total,
+            'page' => intval($_GET['page'] ?? 1),
+            'limit' => $limit,
+            'pages' => ceil($total / $limit)
         ]
     ]);
 }
 
-function handleGetItemDetails($conn) {
+function handleGetItemDetails() {
     $itemId = $_GET['item_id'] ?? '';
     
     if (empty($itemId)) {
@@ -127,77 +140,57 @@ function handleGetItemDetails($conn) {
         return;
     }
 
-    $sql = "SELECT * FROM enhanced_inventory WHERE item_id = ? AND is_active = 1";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute([$itemId]);
-    $item = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$item) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Item not found']);
-        return;
-    }
-
-    echo json_encode($item);
-}
-
-function handleGetUpdates($conn) {
-    $since = $_GET['since'] ?? null;
-    $limit = intval($_GET['limit'] ?? 200);
-
-    if (!$since) {
-        echo json_encode(['results' => [], 'server_time' => time()]);
-        return;
-    }
-
-    try {
-        if (is_numeric($since)) {
-            $sql = "SELECT item_id, item_name, current_stock AS quantity, selling_price AS rate, updated_at FROM enhanced_inventory WHERE UNIX_TIMESTAMP(updated_at) > ? AND is_active = 1 ORDER BY updated_at ASC LIMIT " . intval($limit);
-            $stmt = $conn->prepare($sql);
-            $stmt->execute([$since]);
-        } else {
-            $sql = "SELECT item_id, item_name, current_stock AS quantity, selling_price AS rate, updated_at FROM enhanced_inventory WHERE updated_at > ? AND is_active = 1 ORDER BY updated_at ASC LIMIT " . intval($limit);
-            $stmt = $conn->prepare($sql);
-            $stmt->execute([$since]);
+    $books = getImportedBooks();
+    
+    foreach ($books as $book) {
+        if (($book['Item ID'] ?? '') === $itemId) {
+            echo json_encode([
+                'item_id' => $book['Item ID'] ?? '',
+                'item_name' => $book['Item Name'] ?? '',
+                'grade_level' => $book['Grade Level'] ?? '',
+                'subject_category' => $book['Subject'] ?? '',
+                'quantity' => intval($book['Stock'] ?? 0),
+                'rate' => floatval($book['Rate'] ?? 0),
+                'cost_price' => floatval($book['Cost Price'] ?? 0),
+                'selling_price' => floatval($book['Rate'] ?? 0),
+                'book_type' => $book['Product Type'] ?? '',
+                'status' => $book['Status'] ?? 'Active',
+                'stock_status' => (intval($book['Stock'] ?? 0) > 0) ? 'in_stock' : 'out_of_stock'
+            ]);
+            return;
         }
-
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        echo json_encode(['results' => $rows, 'server_time' => time()]);
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode(['error' => $e->getMessage()]);
     }
+    
+    http_response_code(404);
+    echo json_encode(['error' => 'Item not found']);
 }
 
-function handleGetAdjustmentHistory($conn) {
-    $itemId = $_GET['item_id'] ?? '';
-    $limit = intval($_GET['limit'] ?? 20);
+function handleGetUpdates() {
+    // Since we're reading from CSV, return all current data
+    // Real-time updates would require a database or file-based tracking system
+    $books = getImportedBooks();
+    $results = [];
     
-    if (empty($itemId)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Item ID required']);
-        return;
+    foreach ($books as $book) {
+        $results[] = [
+            'item_id' => $book['Item ID'] ?? '',
+            'item_name' => $book['Item Name'] ?? '',
+            'quantity' => intval($book['Stock'] ?? 0),
+            'rate' => floatval($book['Rate'] ?? 0)
+        ];
     }
-
-    // Return basic info since adjustment_history table may not exist
-    $sql = "SELECT id, current_stock, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') as adjusted_at FROM enhanced_inventory WHERE item_id = ? ORDER BY updated_at DESC LIMIT ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute([$itemId, $limit]);
-    $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    echo json_encode($history);
+    
+    echo json_encode([
+        'results' => $results,
+        'server_time' => time()
+    ]);
 }
 
-function getUniqueValues($conn, $column) {
-    $allowedColumns = ['grade_level', 'subject_category', 'stock_status', 'book_type'];
-    
-    if (!in_array($column, $allowedColumns)) {
-        return [];
-    }
-
-    $sql = "SELECT DISTINCT `$column` FROM enhanced_inventory WHERE `$column` IS NOT NULL AND `$column` != '' AND is_active = 1 ORDER BY `$column`";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute();
-    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+function handleGetAdjustmentHistory() {
+    // CSV doesn't track history, return empty array
+    echo json_encode([
+        'history' => [],
+        'message' => 'No adjustment history available for CSV imports'
+    ]);
 }
 ?>
