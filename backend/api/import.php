@@ -183,6 +183,10 @@ function processDailyImport($rows, $conn, $summary) {
 
         // Extract values from CSV
         $item_id = trim($row['item_id'] ?? '');
+        // Handle scientific notation in item_id (e.g., 7.2887E+18)
+        if (strpos($item_id, 'E') !== false || strpos($item_id, 'e') !== false) {
+            $item_id = number_format(floatval($item_id), 0, '', '');
+        }
         $item_name = trim($row['item_name'] ?? '');
         // Accept both 'quantity_sold' and 'quantity_sc' column names
         $quantity_sold = floatval($row['quantity_sold'] ?? $row['quantity_sc'] ?? 0);
