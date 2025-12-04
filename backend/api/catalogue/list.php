@@ -41,16 +41,21 @@ try {
         SELECT 
             NULL as book_id,
             i.item_id,
-            "" as isbn,
+            i.item_id as isbn,
             i.item_name as title,
-            "" as author,
-            "" as publisher,
-            i.product_type as category,
-            "" as description,
+            \'\' as author,
+            \'\' as publisher,
+            CASE 
+                WHEN i.item_name LIKE \'%Mathematics%\' OR i.item_name LIKE \'%Redicovery%\' THEN \'Mathematics\'
+                WHEN i.item_name LIKE \'%Phonics%\' THEN \'Language Arts\'
+                WHEN i.item_name LIKE \'%Island Jamaica%\' OR i.item_name LIKE \'%Learn Together%\' THEN \'Social Studies\'
+                ELSE \'General\'
+            END as category,
+            \'\' as description,
             CAST(i.rate AS DECIMAL(10, 2)) as unit_price,
             COALESCE(i.quantity, 0) as quantity_on_hand,
             0 as reorder_level,
-            "csv" as source
+            \'csv\' as source
         FROM inventory i
         WHERE i.book_id IS NULL AND i.item_id IS NOT NULL
         
