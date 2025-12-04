@@ -39,7 +39,7 @@ try {
     $status = $input['status'];
     $notes = $input['notes'] ?? '';
 
-    // Validate status
+    //Validates status
     $validStatuses = ['pending', 'acknowledged', 'reorder_initiated', 'resolved'];
     if (!in_array($status, $validStatuses)) {
         http_response_code(400);
@@ -50,7 +50,7 @@ try {
     $conn = get_db_connection();
     $conn->beginTransaction();
 
-    // Update alert status
+    //Update alert status
     $stmt = $conn->prepare('
         UPDATE low_stock_alerts
         SET status = ?, last_updated = NOW()
@@ -58,7 +58,7 @@ try {
     ');
     $stmt->execute([$status, $alertId]);
 
-    // Log status change in history
+    //Logs status change in history
     $stmt = $conn->prepare('
         INSERT INTO low_stock_history
         (alert_id, status, notes, updated_by)
