@@ -1,5 +1,5 @@
 <?php
-// import.php - CSV import API that saves files for search
+// import.php - CSV import API for both initial inventory and daily sales
 header('Content-Type: application/json');
 
 error_log('=== CSV IMPORT START ===');
@@ -12,6 +12,8 @@ set_error_handler(function($errno, $errstr) {
 });
 
 try {
+    require_once '../config/database.php';
+    
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         throw new Exception('Method not allowed');
     }
@@ -22,6 +24,7 @@ try {
 
     $importType = $_POST['importType'] ?? 'daily';
     $file = $_FILES['csv']['tmp_name'];
+    $conn = get_db_connection();
 
     error_log("Import Type: $importType");
     error_log("File: " . $_FILES['csv']['name']);
@@ -61,50 +64,26 @@ try {
         throw new Exception('No data rows found in CSV');
     }
 
-    // Save imported books to CSV file for search
-    $uploadDir = __DIR__ . '/../../backend/uploads/';
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0755, true);
-    }
-
-    $csvPath = $uploadDir . 'imported_books.csv';
-    
-    // If initial import, create new file; otherwise append
-    $mode = ($importType === 'initial') ? 'w' : 'a';
-    $handle = fopen($csvPath, $mode);
-    
-    if (!$handle) {
-        throw new Exception('Unable to save CSV file');
-    }
-
-    // Write header if it's a new file or initial import
-    if ($importType === 'initial') {
-        fputcsv($handle, $header);
-    }
-
-    // Write data rows
-    $successCount = 0;
-    foreach ($rows as $row) {
-        $values = [];
-        foreach ($header as $col) {
-            $values[] = $row[$col] ?? '';
-        }
-        fputcsv($handle, $values);
-        $successCount++;
-    }
-    fclose($handle);
-
+    // Process based on import type
     $summary = [
-        'processed' => count($rows),
-        'successful' => $successCount,
+        'processed' => 0,
+        'successful' => 0,
         'unrecognized' => [],
         'discrepancies' => [],
         'errors' => [],
-        'total_sales' => 0,
-        'message' => 'Books imported successfully and saved to search database'
+        'total_sales' => 0
     ];
 
-    error_log('Import Complete: Saved ' . $successCount . ' rows');
+    if ($importType === 'initial') {
+        $summary = processInitialImport($rows, $conn, $summary);
+    } else {
+        $summary = processDailyImport($rows, $conn, $summary);
+    }
+
+    // Log import activity
+    logImport($_FILES['csv']['name'], $importType, $summary, $conn);
+
+    error_log('Final Summary: Processed=' . $summary['processed'] . ', Successful=' . $summary['successful'] . ', Errors=' . count($summary['errors']));
 
     echo json_encode($summary);
 
@@ -120,7 +99,170 @@ try {
         'errors' => []
     ]);
 }
-?>
+
+/**
+ * Process Initial Inventory Import
+ * Columns: Item ID, Item Name, Rate, Product Type, Status
+ */
+function processInitialImport($rows, $conn, $summary) {
+    error_log('=== INITIAL IMPORT START ===');
+    
+    foreach ($rows as $idx => $row) {
+        $summary['processed']++;
+
+        // Extract values from CSV
+        $item_id = trim($row['Item ID'] ?? '');
+        $item_name = trim($row['Item Name'] ?? '');
+        $rate = trim($row['Rate'] ?? '');
+        $product_type = trim($row['Product Type'] ?? 'goods');
+        $status = trim($row['Status'] ?? 'Active');
+
+        error_log("Row $idx: ID='$item_id', Name='$item_name', Rate='$rate'");
+
+        // Validate required fields
+        if (!$item_id || !$item_name || !$rate) {
+            $error = 'Missing required: ';
+            if (!$item_id) $error .= 'Item ID, ';
+            if (!$item_name) $error .= 'Item Name, ';
+            if (!$rate) $error .= 'Rate, ';
+            $summary['errors'][] = ['row' => $idx, 'error' => rtrim($error, ', ')];
+            error_log("Row $idx - FAILED: $error");
+            continue;
+        }
+
+        // Extract numeric rate from format like "JMD 2390.00"
+        $rate_numeric = floatval(preg_replace('/[^\d.]/', '', $rate));
+        if ($rate_numeric <= 0) {
+            $summary['errors'][] = ['row' => $idx, 'error' => "Invalid rate: $rate"];
+            error_log("Row $idx - FAILED: Invalid rate");
+            continue;
+        }
+
+        // Check if item already exists
+        try {
+            $stmt = $conn->prepare('SELECT id FROM inventory WHERE item_id = ?');
+            $stmt->execute([$item_id]);
+            if ($stmt->rowCount() > 0) {
+                error_log("Row $idx - SKIPPED: Already exists");
+                continue;
+            }
+
+            // Insert new item with quantity = 0 (fresh inventory)
+            // book_id is NULL because CSV imports are independent of books table
+            $stmt = $conn->prepare('
+                INSERT INTO inventory (book_id, item_id, item_name, rate, product_type, status, quantity) 
+                VALUES (NULL, ?, ?, ?, ?, ?, 0)
+            ');
+            $stmt->execute([$item_id, $item_name, $rate, $product_type, $status]);
+            $summary['successful']++;
+            error_log("Row $idx - SUCCESS: Inserted");
+
+        } catch (PDOException $e) {
+            $error = $e->getMessage();
+            $summary['errors'][] = ['row' => $idx, 'error' => $error];
+            error_log("Row $idx - DB ERROR: $error");
+        }
+    }
+
+    error_log('=== INITIAL IMPORT COMPLETE: ' . $summary['successful'] . ' successful, ' . count($summary['errors']) . ' errors ===');
+    return $summary;
+}
+
+
+
+/**
+ * Process Daily Sales Import
+ * Columns: item_id, item_name, quantity_sold, amount, average_price
+ */
+function processDailyImport($rows, $conn, $summary) {
+    error_log('=== DAILY IMPORT START ===');
+    
+    $total_sales = 0;
+
+    foreach ($rows as $idx => $row) {
+        $summary['processed']++;
+
+        // Extract values from CSV
+        $item_id = trim($row['item_id'] ?? '');
+        $item_name = trim($row['item_name'] ?? '');
+        $quantity_sold = floatval($row['quantity_sold'] ?? 0);
+        $amount = floatval($row['amount'] ?? 0);
+        $average_price = floatval($row['average_price'] ?? 0);
+
+        error_log("Row $idx: ID='$item_id', QTY=$quantity_sold, Price=$average_price");
+
+        // Validate required fields
+        if (!$item_id || !$item_name || $quantity_sold <= 0) {
+            $summary['errors'][] = ['row' => $idx, 'error' => 'Missing or invalid required fields'];
+            error_log("Row $idx - FAILED: Missing required");
+            continue;
+        }
+
+        $total_sales += $amount;
+
+        // Find item in inventory
+        try {
+            $stmt = $conn->prepare('SELECT id, rate, quantity FROM inventory WHERE item_id = ?');
+            $stmt->execute([$item_id]);
+            $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$item) {
+                // Item not found in inventory
+                $summary['unrecognized'][] = $row;
+                error_log("Row $idx - UNRECOGNIZED: Item not in inventory");
+                continue;
+            }
+
+            // Extract stored rate and check price discrepancy
+            $stored_rate = floatval(preg_replace('/[^\d.]/', '', $item['rate']));
+            
+            if ($stored_rate > 0) {
+                $price_diff_pct = abs($stored_rate - $average_price) / $stored_rate * 100;
+                error_log("Row $idx - Price check: Stored=$stored_rate, CSV=$average_price, Diff=" . round($price_diff_pct, 2) . "%");
+                
+                if ($price_diff_pct > 10) {
+                    $summary['discrepancies'][] = $row;
+                    error_log("Row $idx - DISCREPANCY: Price difference > 10%");
+                    continue;
+                }
+            }
+
+            // Update quantity - deduct sales
+            $new_quantity = max(0, $item['quantity'] - $quantity_sold);
+            $stmt = $conn->prepare('UPDATE inventory SET quantity = ? WHERE id = ?');
+            $stmt->execute([$new_quantity, $item['id']]);
+            
+            $summary['successful']++;
+            error_log("Row $idx - SUCCESS: Updated qty from {$item['quantity']} to $new_quantity");
+
+        } catch (PDOException $e) {
+            $error = $e->getMessage();
+            $summary['errors'][] = ['row' => $idx, 'error' => $error];
+            error_log("Row $idx - DB ERROR: $error");
+        }
+    }
+
+    $summary['total_sales'] = $total_sales;
+    error_log('=== DAILY IMPORT COMPLETE: ' . $summary['successful'] . ' successful, ' . count($summary['unrecognized']) . ' unrecognized ===');
+    return $summary;
+}
+
+
+
+/**
+ * Log import activity to database
+ */
+function logImport($filename, $type, $summary, $conn) {
+    try {
+        $user_id = 1; // Default to manager user
+        if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) {
+            $user_id = $_SESSION['user_id'];
+        }
+        
+        $status = (count($summary['errors']) > 0 || count($summary['discrepancies']) > 0) ? 'completed_with_issues' : 'completed';
+        
+        $stmt = $conn->prepare('
+            INSERT INTO import_logs 
             (user_id, file_name, import_type, status, rows_processed, rows_failed, uploaded_at, completed_at) 
             VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
         ');
