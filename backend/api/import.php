@@ -154,10 +154,10 @@ function processInitialImport($rows, $conn, $summary) {
             // Insert new item with quantity = 0 (fresh inventory)
             // book_id is NULL because CSV imports are independent of books table
             $stmt = $conn->prepare('
-                INSERT INTO inventory (book_id, item_id, item_name, rate, product_type, status, quantity) 
-                VALUES (NULL, ?, ?, ?, ?, ?, 0)
+                INSERT INTO inventory (book_id, item_id, item_name, rate, quantity) 
+                VALUES (NULL, ?, ?, ?, 0)
             ');
-            $stmt->execute([$item_id, $item_name, $rate, $product_type, $status]);
+            $stmt->execute([$item_id, $item_name, $rate_numeric]);
             $summary['successful']++;
             error_log("Row $idx - SUCCESS: Inserted");
 
