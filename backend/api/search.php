@@ -88,14 +88,21 @@ function handleSearch($conn, $page, $offset, $limit) {
     $stmt->execute($params);
     $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Add stock_status to results
+    // Add stock_status to results and map fields for catalogue
     foreach ($results as &$result) {
         $result['stock_status'] = intval($result['quantity']) > 0 ? 'in_stock' : 'out_of_stock';
+        // Map CSV fields to catalogue fields
+        $result['title'] = $result['item_name'];
+        $result['unit_price'] = $result['rate'];
+        $result['quantity_on_hand'] = intval($result['quantity']);
+        $result['author'] = 'N/A';
+        $result['category'] = 'N/A';
+        $result['source'] = 'csv';
     }
 
     echo json_encode([
         'success' => true,
-        'data' => $results,
+        'results' => $results,
         'pagination' => [
             'total' => $total,
             'page' => $page,
