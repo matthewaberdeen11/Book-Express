@@ -15,13 +15,16 @@ function initCatalogue() {
 
 // Load all catalogue items
 function loadCatalogue() {
-    fetch('../backend/api/catalogue/list.php')
+    fetch('../backend/api/search.php?action=search&limit=1000')
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                // Store items with their source already set from backend
-                catalogueData.items = data.items;
-                displayCatalogue(catalogueData.items);
+            if (data.results) {
+                // Convert search results to catalogue format
+                catalogueData.items = data.results.map(item => ({
+                    ...item,
+                    source: 'all'
+                }));
+                displayCatalogueSearchResults(catalogueData.items);
             } else {
                 console.error('Error loading catalogue:', data.error);
                 document.getElementById('catalogueBody').innerHTML = 
@@ -669,13 +672,13 @@ function displayCatalogueSearchResults(results) {
             `<span style="color: #ef4444;">Out of stock</span>`;
         
         html += `
-            <tr class="${stockClass}">
-                <td>${escapeHtml(item.item_id || '')}</td>
-                <td>${escapeHtml(item.item_name || '')}</td>
-                <td>${escapeHtml(item.grade_level || '-')}</td>
-                <td>${escapeHtml(item.subject_category || '-')}</td>
-                <td>$${item.rate || '0.00'}</td>
-                <td>${stockStatus}</td>
+            <tr class="${stockClass}" style="cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f5f5f5';" onmouseout="this.style.backgroundColor='transparent';">
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.item_id || '')}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.item_name || '')}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.grade_level || '-')}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${escapeHtml(item.subject_category || '-')}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">$${item.rate || '0.00'}</td>
+                <td onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}';" style="cursor: pointer;">${stockStatus}</td>
                 <td>
                     <button class="btn-small" onclick="editItem(${item.item_id})" style="padding: 4px 8px; background: #0066ff; color: white; border: none; border-radius: 4px; cursor: pointer;">
                         Edit

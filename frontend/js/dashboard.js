@@ -61,7 +61,7 @@ function setupDashboardSearch() {
             let html = '<ul style="list-style:none;padding:0;">';
             data.results.forEach(item => {
                 const outClass = (item.quantity === null || Number(item.quantity) <= 0) ? 'out-of-stock' : '';
-                html += `<li class="dash-item ${outClass}" data-item-id="${item.item_id}" style="padding:10px 0;border-bottom:1px solid #eee;">
+                html += `<li class="dash-item ${outClass}" data-item-id="${item.item_id}" style="padding:10px 0;border-bottom:1px solid #eee; cursor:pointer; transition: background-color 0.2s;" onclick="window.location.href='item-details.html?id=${encodeURIComponent(item.item_id)}'" onmouseover="this.style.backgroundColor='#f5f5f5';" onmouseout="this.style.backgroundColor='transparent';">
                     <strong>${escapeHtml(item.item_name)}</strong> <span style="color:#2196f3;">(${escapeHtml(item.item_id)})</span><br>
                     Quantity: <span class="dash-qty" data-item-id="${escapeHtml(item.item_id)}">${item.quantity}</span> | Rate: ${escapeHtml(item.rate)}</li>`;
             });
