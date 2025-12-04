@@ -31,6 +31,97 @@ if ($_SERVER['REQUEST_METHOD'] !== 'PUT') {
 try {
     $input = json_decode(file_get_contents('php://input'), true);
     
+    $source = $input['source'] ?? 'manual';
+    
+    // Handle CSV items differently
+    if ($source === 'csv') {
+        if (empty($input['item_id'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Item ID is required']);
+            exit;
+        }
+        
+        $conn = get_db_connection();
+        
+        // Get current inventory item details
+        $stmt = $conn->prepare('SELECT * FROM inventory WHERE item_id = ? AND book_id IS NULL');
+        $stmt->execute([$input['item_id']]);
+        $current = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$current) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Item not found']);
+            exit;
+        }
+        
+        // Track changes for CSV items
+        $changes = [];
+        $update_parts = [];
+        $update_values = [];
+        
+        // CSV items can update: item_name (title), product_type (category), rate (unit_price)
+        if (isset($input['title']) && $input['title'] != $current['item_name']) {
+            $update_parts[] = "item_name = ?";
+            $update_values[] = $input['title'];
+            $changes['item_name'] = [
+                'old' => $current['item_name'],
+                'new' => $input['title']
+            ];
+        }
+        
+        if (isset($input['category']) && $input['category'] != $current['product_type']) {
+            $update_parts[] = "product_type = ?";
+            $update_values[] = $input['category'];
+            $changes['product_type'] = [
+                'old' => $current['product_type'],
+                'new' => $input['category']
+            ];
+        }
+        
+        if (isset($input['unit_price']) && $input['unit_price'] != $current['rate']) {
+            $update_parts[] = "rate = ?";
+            $update_values[] = $input['unit_price'];
+            $changes['rate'] = [
+                'old' => $current['rate'],
+                'new' => $input['unit_price']
+            ];
+        }
+        
+        // Update inventory item if there are changes
+        if (!empty($update_parts)) {
+            $update_values[] = $input['item_id'];
+            $sql = 'UPDATE inventory SET ' . implode(', ', $update_parts) . ' WHERE item_id = ? AND book_id IS NULL';
+            $stmt = $conn->prepare($sql);
+            $stmt->execute($update_values);
+            
+            // Log changes in audit log
+            foreach ($changes as $field => $change) {
+                $stmt = $conn->prepare('
+                    INSERT INTO catalogue_audit_log 
+                    (item_id, user_id, action_type, field_changed, old_value, new_value)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ');
+                
+                $stmt->execute([
+                    $input['item_id'],
+                    $user['id'],
+                    'UPDATE',
+                    $field,
+                    $change['old'],
+                    $change['new']
+                ]);
+            }
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'CSV item updated successfully',
+            'changes' => count($changes)
+        ]);
+        exit;
+    }
+    
+    // Handle manual items (existing logic)
     if (empty($input['book_id'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Book ID is required']);

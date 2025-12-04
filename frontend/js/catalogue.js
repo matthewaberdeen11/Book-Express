@@ -1,25 +1,25 @@
 ﻿// ==================== CATALOGUE MANAGEMENT ====================
 
-// Global catalogue data
+//global catalogue data
 let catalogueData = {
     items: [],
     currentFilter: 'all'
 };
 
-// Initialize catalogue section
+//initialize catalogue page
 function initCatalogue() {
     console.log('Initializing catalogue...');
     loadCatalogue();
     setupCatalogueEventListeners();
 }
 
-// Load all catalogue items
+//load catalogue items from backend
 function loadCatalogue() {
     fetch('../backend/api/catalogue/list.php')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Store items with their source already set from backend
+                //store items globally
                 catalogueData.items = data.items;
                 displayCatalogue(catalogueData.items);
             } else {
@@ -35,11 +35,11 @@ function loadCatalogue() {
         });
 }
 
-// Display catalogue items in table
+//display catalogue items in table
 function displayCatalogue(items) {
     const tbody = document.getElementById('catalogueBody');
     
-    // Apply current filter
+    //apply current filter
     let filteredItems = items;
     if (catalogueData.currentFilter === 'csv') {
         filteredItems = items.filter(item => item.source === 'csv');
@@ -61,9 +61,12 @@ function displayCatalogue(items) {
         const stockWarning = stock < 10 && stock > 0 ? '<i class="fas fa-exclamation-triangle" style="color: #f59e0b; margin-left: 5px;"></i>' : '';
         const sourceBadge = item.source === 'csv' ? '<span class="source-badge csv">CSV</span>' : '<span class="source-badge manual">Manual</span>';
         
-        // Use book_id for manual items, item_id for CSV items
+        //use item_id for CSV items, book_id for manual items
         const itemId = item.source === 'csv' ? item.item_id : item.book_id;
         const displayIsbn = item.isbn || item.item_id || 'N/A';
+        
+        // For CSV items, wrap itemId in quotes since it's a string
+        const itemIdParam = item.source === 'csv' ? `'${escapeHtml(itemId)}'` : escapeHtml(itemId);
         
         html += `
             <tr data-source="${item.source}">
@@ -74,13 +77,13 @@ function displayCatalogue(items) {
                 <td>$${parseFloat(item.unit_price).toFixed(2)}</td>
                 <td class="${stockClass}">${stock}${stockWarning}</td>
                 <td>
-                    <button class="btn-icon" onclick="editItem(${escapeHtml(itemId)}, '${item.source}')" title="Edit">
+                    <button class="btn-icon" onclick="editItem(${itemIdParam}, '${item.source}')" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-icon" onclick="showAdjustModal('${item.source}', ${escapeHtml(itemId)}, ${stock}, '${escapeHtml(item.title)}')" title="Adjust Stock">
+                    <button class="btn-icon" onclick="showAdjustModal('${item.source}', ${itemIdParam}, ${stock}, '${escapeHtml(item.title)}')" title="Adjust Stock">
                         <i class="fas fa-arrows-alt-v"></i>
                     </button>
-                    <button class="btn-icon" onclick="viewHistory('${item.source}', ${escapeHtml(itemId)}, '${escapeHtml(item.title)}')" title="View History">
+                    <button class="btn-icon" onclick="viewHistory('${item.source}', ${itemIdParam}, '${escapeHtml(item.title)}')" title="View History">
                         <i class="fas fa-history"></i>
                     </button>
                 </td>
@@ -91,23 +94,23 @@ function displayCatalogue(items) {
     tbody.innerHTML = html;
 }
 
-// Setup event listeners
+//setup event listeners for catalogue page
 function setupCatalogueEventListeners() {
-    // Item form submission
+    //item form 
     const itemForm = document.getElementById('itemForm');
     if (itemForm) {
         itemForm.removeEventListener('submit', handleItemSubmit);
         itemForm.addEventListener('submit', handleItemSubmit);
     }
     
-    // Adjust form submission
+    //adjust form submission
     const adjustForm = document.getElementById('adjustForm');
     if (adjustForm) {
         adjustForm.removeEventListener('submit', handleAdjustSubmit);
         adjustForm.addEventListener('submit', handleAdjustSubmit);
     }
     
-    // Reason dropdown change
+    //reason dropdown bar change
     const reasonSelect = document.getElementById('reason');
     if (reasonSelect) {
         reasonSelect.removeEventListener('change', toggleOtherReasonField);
@@ -121,7 +124,7 @@ function setupCatalogueEventListeners() {
         searchInput.addEventListener('keyup', filterCatalogue);
     }
     
-    // Close modals when clicking outside
+    //modal closes on outside click
     window.onclick = function(event) {
         if (event.target.classList.contains('modal')) {
             event.target.style.display = 'none';
@@ -129,7 +132,7 @@ function setupCatalogueEventListeners() {
     };
 }
 
-// Toggle other reason field
+//other reason field toggle
 function toggleOtherReasonField() {
     const reasonSelect = document.getElementById('reason');
     const otherReasonGroup = document.getElementById('otherReasonGroup');
@@ -142,24 +145,24 @@ function toggleOtherReasonField() {
     }
 }
 
-// Filter catalogue by source (CSV or manual)
+//filter catalogue by source
 function filterBySource(source) {
     catalogueData.currentFilter = source;
     
-    // Update active button
+    //activate button update
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     document.querySelector(`[data-filter="${source}"]`).classList.add('active');
     
-    // Re-display catalogue with filter applied
+    //redisplay catalogue
     displayCatalogue(catalogueData.items);
     
     // Clear search when changing filter
     document.getElementById('searchInput').value = '';
 }
 
-// Filter catalogue items based on search input
+// filter catalogue by search term
 function filterCatalogue() {
     const searchInput = document.getElementById('searchInput');
     const searchTerm = searchInput.value.toLowerCase().trim();
@@ -170,7 +173,7 @@ function filterCatalogue() {
         const cells = row.querySelectorAll('td');
         let match = false;
         
-        // Search in ISBN, Title, Author, and Category columns
+        //search in ISBN, Title, Author, and Category columns
         for (let i = 0; i < Math.min(4, cells.length); i++) {
             const cellText = cells[i].textContent.toLowerCase();
             if (cellText.includes(searchTerm)) {
@@ -187,7 +190,7 @@ function filterCatalogue() {
         }
     });
     
-    // Show message if no results found
+    //show no results message if nothing matches
     if (visibleCount === 0 && searchTerm !== '') {
         const tbody = document.getElementById('catalogueBody');
         const existingMessage = tbody.querySelector('.no-results');
@@ -198,7 +201,7 @@ function filterCatalogue() {
             tbody.appendChild(noResultsRow);
         }
     } else {
-        // Remove no results message if search is cleared
+        //remove no results message if search is cleared
         const noResultsRow = document.querySelector('.no-results');
         if (noResultsRow) {
             noResultsRow.remove();
@@ -206,45 +209,75 @@ function filterCatalogue() {
     }
 }
 
-// Show create modal
+//show create modal
 function showCreateModal() {
     document.getElementById('modalTitle').textContent = 'Add New Item';
     document.getElementById('itemForm').reset();
     document.getElementById('book_id').value = '';
+    document.getElementById('item_id').value = '';
+    document.getElementById('item_source').value = 'manual';
     document.getElementById('isbn').disabled = false;
+    document.getElementById('author').disabled = false;
+    document.getElementById('publisher').disabled = false;
+    document.getElementById('description').disabled = false;
     document.getElementById('initial_quantity').value = '0';
     document.getElementById('initialQuantityGroup').style.display = 'block';
     document.getElementById('itemModal').style.display = 'block';
 }
 
-// Edit item
-function editItem(bookId, source) {
-    // Check if this is a CSV item - show as read-only
-    if (source === 'csv') {
-        alert('CSV imported items cannot be edited directly. Please adjust stock quantities or delete and re-import if needed.');
-        return;
-    }
-    
-    // For manual items, load and edit normally
+//edit item
+function editItem(itemId, source) {
     fetch('../backend/api/catalogue/list.php')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                const item = data.items.find(i => i.book_id == bookId && i.source === 'manual');
+                let item;
+                if (source === 'csv') {
+                    item = data.items.find(i => i.item_id == itemId && i.source === 'csv');
+                } else {
+                    item = data.items.find(i => i.book_id == itemId && i.source === 'manual');
+                }
+                
                 if (item) {
                     document.getElementById('modalTitle').textContent = 'Edit Item';
-                    document.getElementById('book_id').value = item.book_id;
-                    document.getElementById('isbn').value = item.isbn;
-                    document.getElementById('isbn').disabled = true;
-                    document.getElementById('title').value = item.title;
-                    document.getElementById('author').value = item.author || '';
-                    document.getElementById('publisher').value = item.publisher || '';
-                    document.getElementById('category').value = item.category || '';
-                    document.getElementById('unit_price').value = item.unit_price;
-                    document.getElementById('reorder_level').value = item.reorder_level || 10;
-                    document.getElementById('description').value = item.description || '';
-                    document.getElementById('initialQuantityGroup').style.display = 'none';
                     
+                    if (source === 'csv') {
+                        // CSV item editing
+                        document.getElementById('book_id').value = '';
+                        document.getElementById('item_id').value = item.item_id;
+                        document.getElementById('item_source').value = 'csv';
+                        document.getElementById('isbn').value = item.item_id;
+                        document.getElementById('isbn').disabled = true;
+                        document.getElementById('title').value = item.title;
+                        document.getElementById('author').value = '';
+                        document.getElementById('author').disabled = true;
+                        document.getElementById('publisher').value = '';
+                        document.getElementById('publisher').disabled = true;
+                        document.getElementById('category').value = item.category || '';
+                        document.getElementById('unit_price').value = item.unit_price;
+                        document.getElementById('reorder_level').value = item.reorder_level || 10;
+                        document.getElementById('description').value = '';
+                        document.getElementById('description').disabled = true;
+                    } else {
+                        // Manual item editing
+                        document.getElementById('book_id').value = item.book_id;
+                        document.getElementById('item_id').value = '';
+                        document.getElementById('item_source').value = 'manual';
+                        document.getElementById('isbn').value = item.isbn;
+                        document.getElementById('isbn').disabled = true;
+                        document.getElementById('title').value = item.title;
+                        document.getElementById('author').value = item.author || '';
+                        document.getElementById('author').disabled = false;
+                        document.getElementById('publisher').value = item.publisher || '';
+                        document.getElementById('publisher').disabled = false;
+                        document.getElementById('category').value = item.category || '';
+                        document.getElementById('unit_price').value = item.unit_price;
+                        document.getElementById('reorder_level').value = item.reorder_level || 10;
+                        document.getElementById('description').value = item.description || '';
+                        document.getElementById('description').disabled = false;
+                    }
+                    
+                    document.getElementById('initialQuantityGroup').style.display = 'none';
                     document.getElementById('itemModal').style.display = 'block';
                 } else {
                     alert('Item not found');
@@ -257,32 +290,50 @@ function editItem(bookId, source) {
         });
 }
 
-// Handle item form submission (create or update)
+//handle item form submission
 function handleItemSubmit(e) {
     e.preventDefault();
     
     const bookId = document.getElementById('book_id').value;
+    const itemId = document.getElementById('item_id').value;
+    const source = document.getElementById('item_source').value;
+    
     const formData = {
-        isbn: document.getElementById('isbn').value,
         title: document.getElementById('title').value,
-        author: document.getElementById('author').value,
-        publisher: document.getElementById('publisher').value,
         category: document.getElementById('category').value,
         unit_price: parseFloat(document.getElementById('unit_price').value),
-        description: document.getElementById('description').value,
         reorder_level: parseInt(document.getElementById('reorder_level').value)
     };
     
+    // Add fields specific to manual items
+    if (source !== 'csv') {
+        formData.isbn = document.getElementById('isbn').value;
+        formData.author = document.getElementById('author').value;
+        formData.publisher = document.getElementById('publisher').value;
+        formData.description = document.getElementById('description').value;
+    }
+    
     let url, method;
-    if (bookId) {
-        // Update existing item
+    if (bookId || itemId) {
+        //update existing item
         url = '../backend/api/catalogue/update_item.php';
         method = 'PUT';
-        formData.book_id = bookId;
+        
+        if (source === 'csv') {
+            formData.item_id = itemId;
+            formData.source = 'csv';
+        } else {
+            formData.book_id = bookId;
+            formData.source = 'manual';
+        }
     } else {
-        // Create new item
+        //create new item (manual only)
         url = '../backend/api/catalogue/create_item.php';
         method = 'POST';
+        formData.isbn = document.getElementById('isbn').value;
+        formData.author = document.getElementById('author').value;
+        formData.publisher = document.getElementById('publisher').value;
+        formData.description = document.getElementById('description').value;
         formData.initial_quantity = parseInt(document.getElementById('initial_quantity').value) || 0;
     }
     
@@ -309,14 +360,14 @@ function handleItemSubmit(e) {
     });
 }
 
-// Show adjust stock modal
+//show adjust stock modal
 function showAdjustModal(source, itemId, currentStock, title) {
     if (source === 'csv') {
-        // For CSV items, store item_id as string
+        //for CSV items, store item_id as string
         document.getElementById('adjust_book_id').value = itemId;
         document.getElementById('adjust_source').value = 'csv';
     } else {
-        // For manual items, store book_id as number
+        //for manual items, store book_id as number
         document.getElementById('adjust_book_id').value = itemId;
         document.getElementById('adjust_source').value = 'manual';
     }
@@ -328,7 +379,7 @@ function showAdjustModal(source, itemId, currentStock, title) {
     updateAdjustmentLabel();
 }
 
-// Handle stock adjustment submission
+//stock adjustment submission
 function handleAdjustSubmit(e) {
     e.preventDefault();
     
@@ -339,13 +390,13 @@ function handleAdjustSubmit(e) {
     const currentStock = parseInt(document.getElementById('current_quantity').value);
     let reason = document.getElementById('reason').value;
     
-    // Validate reason is selected
+    //validate reason is selected
     if (!reason || reason === '') {
         alert('Adjustment reason is required');
         return;
     }
     
-    // If "Other" is selected, append the custom reason
+    //if "Other" is selected, append the custom reason
     if (reason === 'Other') {
         const otherReason = document.getElementById('otherReason').value.trim();
         if (otherReason) {
@@ -366,7 +417,7 @@ function handleAdjustSubmit(e) {
         adjustmentAmount = quantity - currentStock;
     }
     
-    // Validate stock won't go negative
+    //prevent negative stock
     const newStock = currentStock + adjustmentAmount;
     if (newStock < 0) {
         alert(`Cannot reduce stock below zero.\nCurrent Stock: ${currentStock}\nAttempted Adjustment: ${adjustmentAmount}\nWould Result in: ${newStock}`);
@@ -405,12 +456,12 @@ function handleAdjustSubmit(e) {
     });
 }
 
-// View adjustment history
+//view stock history
 function viewHistory(source, itemId, title) {
     document.getElementById('historyTitle').textContent = title + ' - Stock History';
     document.getElementById('historyModal').style.display = 'block';
     
-    // Use book_id for manual items, item_id for CSV items
+    //use book_id for manual, item_id for CSV
     const queryParam = source === 'csv' ? `item_id=${itemId}` : `book_id=${itemId}`;
     
     fetch(`../backend/api/catalogue/get_history.php?${queryParam}`)
@@ -421,21 +472,21 @@ function viewHistory(source, itemId, title) {
                 let html = '';
                 
                 data.history.forEach(record => {
-                    // Parse timestamp properly
+                    //parse and format date
                     const date = new Date(record.timestamp || record.date);
                     const formattedDate = isNaN(date.getTime()) 
                         ? (record.timestamp || record.date || 'N/A')
                         : date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
                     
-                    // Format change with +/- prefix
+                    //format quantity change
                     const change = record.quantity_change !== null && record.quantity_change !== undefined
                         ? (record.quantity_change > 0 ? '+' : '') + record.quantity_change
                         : 'N/A';
                     
-                    // Get action type
+                    //get action type
                     const type = record.action_type || record.type || 'N/A';
                     
-                    // Get reason
+                    //get reason
                     const reason = record.adjustment_reason || record.reason || 'N/A';
                     
                     html += `
@@ -461,7 +512,7 @@ function viewHistory(source, itemId, title) {
         });
 }
 
-// Display history items
+//display history records
 function displayHistory(history) {
     const historyBody = document.getElementById('historyBody');
     
@@ -477,7 +528,7 @@ function displayHistory(history) {
         let typeStr = item.action_type || 'N/A';
         let reasonStr = 'N/A';
         
-        // Format date
+        //date formatting
         if (item.timestamp) {
             try {
                 const date = new Date(item.timestamp);
@@ -487,7 +538,7 @@ function displayHistory(history) {
             }
         }
         
-        // Format change and reason based on action type
+        //format change and reason based on action type
         if (item.action_type === 'ADJUST_STOCK') {
             if (item.quantity_change) {
                 const change = parseInt(item.quantity_change);
@@ -515,12 +566,12 @@ function displayHistory(history) {
     historyBody.innerHTML = html;
 }
 
-// Close modal
+//close modal 
 function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
 }
 
-// Escape HTML to prevent XSS
+//escape HTML to prevent XSS
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
