@@ -23,6 +23,7 @@ try {
         'low_stock_items_found' => 0,
         'alerts_created' => 0,
         'alerts_resolved' => 0,
+        'duplicates_removed' => 0,
         'final_alerts' => 0
     ];
 
@@ -51,7 +52,7 @@ try {
         exit;
     }
 
-    // VERIFICATION STEP: Check if tables exist
+    // verification stage: Check if tables exist
     $debugInfo['step'] = 'checking_tables';
     $tables = $conn->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
     $debugInfo['available_tables'] = $tables;
@@ -67,14 +68,24 @@ try {
         exit;
     }
 
-    // Check table structure
-    $debugInfo['step'] = 'checking_structure';
-    $alertCols = $conn->query("SHOW COLUMNS FROM low_stock_alerts")->fetchAll(PDO::FETCH_COLUMN);
-    $inventoryCols = $conn->query("SHOW COLUMNS FROM inventory")->fetchAll(PDO::FETCH_COLUMN);
-    $debugInfo['low_stock_alerts_columns'] = $alertCols;
-    $debugInfo['inventory_columns'] = $inventoryCols;
+    $debugInfo['step'] = 'cleaning_duplicates';
 
-    // STEP 1: Find ALL low stock items
+    $stmt = $conn->prepare('
+        DELETE lsa1 FROM low_stock_alerts lsa1
+        INNER JOIN (
+            SELECT book_id, MAX(id) as max_id
+            FROM low_stock_alerts
+            WHERE status != "resolved"
+            GROUP BY book_id
+            HAVING COUNT(*) > 1
+        ) lsa2 ON lsa1.book_id = lsa2.book_id
+        WHERE lsa1.id < lsa2.max_id
+        AND lsa1.status != "resolved"
+    ');
+    $stmt->execute();
+    $debugInfo['duplicates_removed'] = $stmt->rowCount();
+
+    //step 1: Find ALL low stock items
     $debugInfo['step'] = 'finding_low_stock_items';
 
     $stmt = $conn->prepare('
@@ -101,12 +112,12 @@ try {
     $debugInfo['low_stock_items_found'] = count($allLowStockItems);
     $debugInfo['low_stock_items_sample'] = array_slice($allLowStockItems, 0, 3);
 
-    // STEP 2: Create alerts for items that need them
+    //step  2: Create alerts for items that need them
     $debugInfo['step'] = 'creating_alerts';
     $newAlertsCreated = 0;
 
     foreach ($allLowStockItems as $item) {
-        // Determine which identifier to use
+        //Determines which identifier to use
         $identifier = null;
         if (!empty($item['book_id'])) {
             $identifier = $item['book_id'];
@@ -119,10 +130,11 @@ try {
             continue;
         }
 
-        // Check if alert already exists
+        //Checks if alert already exists
         $checkStmt = $conn->prepare('
             SELECT id, status FROM low_stock_alerts
             WHERE book_id = ?
+            LIMIT 1
         ');
         $checkStmt->execute([$identifier]);
         $existingAlert = $checkStmt->fetch(PDO::FETCH_ASSOC);
@@ -151,7 +163,7 @@ try {
                 $debugInfo['insert_errors'][] = $e->getMessage();
             }
         } elseif ($existingAlert['status'] === 'resolved') {
-            // Reopen resolved alert
+            //Reopens resolved alert
             $updateStmt = $conn->prepare('
                 UPDATE low_stock_alerts
                 SET status = ?, is_critical = ?, last_updated = NOW()
@@ -164,14 +176,14 @@ try {
 
     $debugInfo['alerts_created'] = $newAlertsCreated;
 
-    // STEP 3: Auto-resolve alerts for items now above threshold
+    //step 3: Auto-resolve alerts for items now above threshold
     $debugInfo['step'] = 'resolving_alerts';
 
     $stmt = $conn->prepare('
         UPDATE low_stock_alerts lsa
         INNER JOIN inventory i ON (
-            lsa.book_id = CAST(i.book_id AS CHAR) COLLATE utf8mb4_unicode_ci
-            OR lsa.book_id = CAST(i.item_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            CAST(lsa.book_id AS CHAR) = CAST(i.book_id AS CHAR)
+            OR CAST(lsa.book_id AS CHAR) = CAST(i.item_id AS CHAR)
         )
         SET lsa.status = "resolved",
             lsa.last_updated = NOW()
@@ -181,14 +193,14 @@ try {
     $stmt->execute();
     $debugInfo['alerts_resolved'] = $stmt->rowCount();
 
-    // STEP 4: Update is_critical flag
+    //step 4: Update is_critical flag
     $debugInfo['step'] = 'updating_critical_status';
 
     $stmt = $conn->prepare('
         UPDATE low_stock_alerts lsa
         INNER JOIN inventory i ON (
-            lsa.book_id = CAST(i.book_id AS CHAR) COLLATE utf8mb4_unicode_ci
-            OR lsa.book_id = CAST(i.item_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            CAST(lsa.book_id AS CHAR) = CAST(i.book_id AS CHAR)
+            OR CAST(lsa.book_id AS CHAR) = CAST(i.item_id AS CHAR)
         )
         SET lsa.is_critical = CASE
                 WHEN i.quantity_on_hand = 0 THEN 1
@@ -200,9 +212,10 @@ try {
     ');
     $stmt->execute();
 
-    // STEP 5: Get all active alerts with full details
+    //Get all active alerts with full details (NO duplicates)
     $debugInfo['step'] = 'fetching_alerts';
 
+    //Uses a more better query that ensures no duplicates
     $stmt = $conn->prepare('
         SELECT
             lsa.id as alert_id,
@@ -219,11 +232,11 @@ try {
             i.reorder_level as threshold
         FROM low_stock_alerts lsa
         LEFT JOIN inventory i ON (
-            lsa.book_id = CAST(i.book_id AS CHAR) COLLATE utf8mb4_unicode_ci
-            OR lsa.book_id = CAST(i.item_id AS CHAR) COLLATE utf8mb4_unicode_ci
+            CAST(lsa.book_id AS CHAR) = CAST(COALESCE(i.book_id, i.item_id) AS CHAR)
         )
         LEFT JOIN books b ON i.book_id = b.id
         WHERE lsa.status != "resolved"
+        GROUP BY lsa.id
         ORDER BY
             CASE lsa.status
                 WHEN "pending" THEN 1
@@ -237,10 +250,11 @@ try {
 
     $stmt->execute();
     $alerts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
     $debugInfo['final_alerts'] = count($alerts);
     $debugInfo['step'] = 'complete';
 
-    // Also get count of all alerts (including resolved)
+    //Also get count of all alerts (including resolved)
     $totalStmt = $conn->query('SELECT COUNT(*) FROM low_stock_alerts');
     $debugInfo['total_alerts_in_table'] = $totalStmt->fetchColumn();
 
