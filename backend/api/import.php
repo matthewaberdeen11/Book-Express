@@ -112,6 +112,10 @@ function processInitialImport($rows, $conn, $summary) {
 
         // Extract values from CSV
         $item_id = trim($row['Item ID'] ?? '');
+        // Handle scientific notation in item_id (e.g., 7.29E+18)
+        if (strpos($item_id, 'E') !== false || strpos($item_id, 'e') !== false) {
+            $item_id = number_format(floatval($item_id), 0, '', '');
+        }
         $item_name = trim($row['Item Name'] ?? '');
         $rate = trim($row['Rate'] ?? '');
         $product_type = trim($row['Product Type'] ?? 'goods');
@@ -184,6 +188,10 @@ function processDailyImport($rows, $conn, $summary) {
 
         // Extract values from CSV
         $item_id = trim($row['item_id'] ?? '');
+        // Handle scientific notation in item_id (e.g., 7.29E+18)
+        if (strpos($item_id, 'E') !== false || strpos($item_id, 'e') !== false) {
+            $item_id = number_format(floatval($item_id), 0, '', '');
+        }
         $item_name = trim($row['item_name'] ?? '');
         $quantity_sold = floatval($row['quantity_sold'] ?? 0);
         $amount = floatval($row['amount'] ?? 0);
