@@ -140,22 +140,21 @@ function processInitialImport($rows, $conn, $summary) {
 
         // Check if item already exists
         try {
-            $stmt = $conn->prepare('SELECT id FROM inventory WHERE item_id = ?');
+            $stmt = $conn->prepare('SELECT id FROM enhanced_inventory WHERE item_id = ?');
             $stmt->execute([$item_id]);
             if ($stmt->rowCount() > 0) {
-                error_log("Row $idx - SKIPPED: Already exists");
+                error_log("Row $idx - SKIPPED: Already exists in enhanced_inventory");
                 continue;
             }
 
-            // Insert new item with quantity = 0 (fresh inventory)
-            // book_id is NULL because CSV imports are independent of books table
+            // Insert new item into enhanced_inventory table
             $stmt = $conn->prepare('
-                INSERT INTO inventory (book_id, item_id, item_name, rate, product_type, status, quantity) 
-                VALUES (NULL, ?, ?, ?, ?, ?, 0)
+                INSERT INTO enhanced_inventory (item_id, item_name, selling_price, book_type, is_active, current_stock, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, 1, 0, NOW(), NOW())
             ');
-            $stmt->execute([$item_id, $item_name, $rate, $product_type, $status]);
+            $stmt->execute([$item_id, $item_name, $rate_numeric, $product_type]);
             $summary['successful']++;
-            error_log("Row $idx - SUCCESS: Inserted");
+            error_log("Row $idx - SUCCESS: Inserted into enhanced_inventory");
 
         } catch (PDOException $e) {
             $error = $e->getMessage();
@@ -172,7 +171,7 @@ function processInitialImport($rows, $conn, $summary) {
 
 /**
  * Process Daily Sales Import
- * Columns: item_id, item_name, quantity_sold, amount, average_price
+ * Columns: item_id, item_name, quantity_sold (or quantity_sc), amount, average_price
  */
 function processDailyImport($rows, $conn, $summary) {
     error_log('=== DAILY IMPORT START ===');
@@ -185,7 +184,8 @@ function processDailyImport($rows, $conn, $summary) {
         // Extract values from CSV
         $item_id = trim($row['item_id'] ?? '');
         $item_name = trim($row['item_name'] ?? '');
-        $quantity_sold = floatval($row['quantity_sold'] ?? 0);
+        // Accept both 'quantity_sold' and 'quantity_sc' column names
+        $quantity_sold = floatval($row['quantity_sold'] ?? $row['quantity_sc'] ?? 0);
         $amount = floatval($row['amount'] ?? 0);
         $average_price = floatval($row['average_price'] ?? 0);
 
@@ -200,21 +200,21 @@ function processDailyImport($rows, $conn, $summary) {
 
         $total_sales += $amount;
 
-        // Find item in inventory
+        // Find item in enhanced_inventory
         try {
-            $stmt = $conn->prepare('SELECT id, rate, quantity FROM inventory WHERE item_id = ?');
+            $stmt = $conn->prepare('SELECT id, selling_price, current_stock FROM enhanced_inventory WHERE item_id = ?');
             $stmt->execute([$item_id]);
             $item = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$item) {
                 // Item not found in inventory
                 $summary['unrecognized'][] = $row;
-                error_log("Row $idx - UNRECOGNIZED: Item not in inventory");
+                error_log("Row $idx - UNRECOGNIZED: Item not in enhanced_inventory");
                 continue;
             }
 
             // Extract stored rate and check price discrepancy
-            $stored_rate = floatval(preg_replace('/[^\d.]/', '', $item['rate']));
+            $stored_rate = floatval($item['selling_price']);
             
             if ($stored_rate > 0) {
                 $price_diff_pct = abs($stored_rate - $average_price) / $stored_rate * 100;
@@ -227,13 +227,13 @@ function processDailyImport($rows, $conn, $summary) {
                 }
             }
 
-            // Update quantity - deduct sales
-            $new_quantity = max(0, $item['quantity'] - $quantity_sold);
-            $stmt = $conn->prepare('UPDATE inventory SET quantity = ? WHERE id = ?');
+            // Update quantity in enhanced_inventory - deduct sales
+            $new_quantity = max(0, intval($item['current_stock']) - intval($quantity_sold));
+            $stmt = $conn->prepare('UPDATE enhanced_inventory SET current_stock = ?, updated_at = NOW() WHERE id = ?');
             $stmt->execute([$new_quantity, $item['id']]);
             
             $summary['successful']++;
-            error_log("Row $idx - SUCCESS: Updated qty from {$item['quantity']} to $new_quantity");
+            error_log("Row $idx - SUCCESS: Updated qty in enhanced_inventory from {$item['current_stock']} to $new_quantity");
 
         } catch (PDOException $e) {
             $error = $e->getMessage();
