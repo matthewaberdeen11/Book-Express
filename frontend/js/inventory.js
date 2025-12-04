@@ -47,7 +47,9 @@ function debounceSearch(query) {
 // Load inventory from API
 async function loadInventory() {
     try {
-        const response = await fetch('../backend/api/catalogue/list.php');
+        const response = await fetch('../backend/api/catalogue/list.php', {
+            credentials: 'same-origin'
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -177,7 +179,9 @@ function updateSelectionCount() {
 async function showItemDetail(source, itemId, title) {
     try {
         const params = source === 'csv' ? `item_id=${itemId}` : `book_id=${itemId}`;
-        const response = await fetch(`../backend/api/catalogue/list.php?${params}`);
+        const response = await fetch(`../backend/api/catalogue/list.php?${params}`, {
+            credentials: 'same-origin'
+        });
         
         if (!response.ok) throw new Error('Failed to load item details');
         
@@ -266,7 +270,9 @@ function displayItemDetail(item, source) {
 async function loadItemHistory(source, itemId) {
     try {
         const params = source === 'csv' ? `item_id=${itemId}` : `book_id=${itemId}`;
-        const response = await fetch(`../backend/api/catalogue/get_history.php?${params}&limit=10`);
+        const response = await fetch(`../backend/api/catalogue/get_history.php?${params}&limit=10`, {
+            credentials: 'same-origin'
+        });
         
         if (!response.ok) throw new Error('Failed to load history');
         
@@ -360,6 +366,7 @@ async function saveBook(event, itemId = null, source = null) {
             formData[source === 'csv' ? 'item_id' : 'book_id'] = itemId;
             
             const response = await fetch(endpoint, {
+                credentials: 'same-origin',
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
@@ -369,6 +376,7 @@ async function saveBook(event, itemId = null, source = null) {
         } else {
             // Create new item
             const response = await fetch('../backend/api/catalogue/create_item.php', {
+                credentials: 'same-origin',
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
