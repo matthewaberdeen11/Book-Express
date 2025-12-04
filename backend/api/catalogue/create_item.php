@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../auth/SessionManager.php';
+require_once __DIR__ . '/../../utils/GradeExtractor.php';
 
 SessionManager::init();
 
@@ -32,71 +33,66 @@ try {
     $input = json_decode(file_get_contents('php://input'), true);
     
     //validate input
-    if (empty($input['isbn']) || empty($input['title']) || !isset($input['unit_price'])) {
+    if (empty($input['item_name']) || !isset($input['rate'])) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'ISBN, title, and unit_price are required']);
+        echo json_encode(['success' => false, 'error' => 'Item name and price are required']);
         exit;
     }
     
     $conn = get_db_connection();
     
-    //check for duplicate ISBN
-    $stmt = $conn->prepare('SELECT id FROM books WHERE isbn = ?');
-    $stmt->execute([$input['isbn']]);
+    // Generate item_id from item_name if not provided
+    $item_id = $input['item_id'] ?? null;
+    if (!$item_id) {
+        $item_id = 'ITEM-' . strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $input['item_name']), 0, 10)) . '-' . time();
+    }
+    
+    // Check for duplicate item_id
+    $stmt = $conn->prepare('SELECT id FROM inventory WHERE item_id = ?');
+    $stmt->execute([$item_id]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['success' => false, 'error' => 'ISBN already exists']);
+        echo json_encode(['success' => false, 'error' => 'Item ID already exists']);
         exit;
+    }
+    
+    // Extract grade level if not provided
+    $grade_level = $input['grade_level'] ?? null;
+    if (!$grade_level) {
+        $grade_level = GradeExtractor::extractGrade($input['item_name']) ?? 'Ungraded';
     }
     
     //start transaction
     $conn->beginTransaction();
     
-    //insert book
+    //insert into inventory
     $stmt = $conn->prepare('
-        INSERT INTO books (isbn, title, author, publisher, category, description, unit_price)
+        INSERT INTO inventory (item_id, item_name, grade_level, rate, product_type, quantity_on_hand, reorder_level)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ');
     
     $stmt->execute([
-        $input['isbn'],
-        $input['title'],
-        $input['author'] ?? null,
-        $input['publisher'] ?? null,
-        $input['category'] ?? null,
-        $input['description'] ?? null,
-        $input['unit_price']
+        $item_id,
+        $input['item_name'],
+        $grade_level,
+        $input['rate'],
+        $input['product_type'] ?? 'goods',
+        0,
+        10
     ]);
-    
-    $book_id = $conn->lastInsertId();
-    
-    //create inventory record
-    $initial_quantity = max(0, intval($input['initial_quantity'] ?? 0));
-    $reorder_level = intval($input['reorder_level'] ?? 10);
-    
-    // Generate item_id from ISBN (used for CSV imports and tracking)
-    $item_id = strtoupper(str_replace('-', '', $input['isbn'])); // Remove dashes from ISBN
-    
-    $stmt = $conn->prepare('
-        INSERT INTO inventory (book_id, item_id, item_name, quantity_on_hand, reorder_level)
-        VALUES (?, ?, ?, ?, ?)
-    ');
-    
-    $stmt->execute([$book_id, $item_id, $input['title'], $initial_quantity, $reorder_level]);
     
     //log creation in audit log
     $stmt = $conn->prepare('
         INSERT INTO catalogue_audit_log 
-        (book_id, user_id, action_type, new_value, quantity_change)
-        VALUES (?, ?, ?, ?, ?)
+        (item_id, user_id, action_type, new_value, created_at)
+        VALUES (?, ?, ?, ?, NOW())
     ');
     
     $stmt->execute([
-        $book_id,
+        $item_id,
         $user['id'],
         'CREATE',
-        json_encode($input),
-        $initial_quantity
+        json_encode(['item_name' => $input['item_name'], 'grade_level' => $input['grade_level'], 'rate' => $input['rate']])
     ]);
     
     $conn->commit();
@@ -104,7 +100,7 @@ try {
     echo json_encode([
         'success' => true,
         'message' => 'Item created successfully',
-        'book_id' => $book_id
+        'item_id' => $item_id
     ]);
     
 } catch (Exception $e) {

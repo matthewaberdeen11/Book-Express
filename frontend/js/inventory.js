@@ -16,12 +16,17 @@ document.addEventListener('DOMContentLoaded', function() {
 // Setup event listeners
 function setupEventListeners() {
     document.getElementById('inventorySearch').addEventListener('input', (e) => {
-        debounceSearch(e.target.value);
+        filterInventory();
     });
-    
+
     document.getElementById('gradeFilter').addEventListener('change', applyFilters);
-    document.getElementById('categoryFilter').addEventListener('change', applyFilters);
-    
+
+    // Add to Quick Access button
+    const quickAccessBtn = document.getElementById('addToQuickAccessBtn');
+    if (quickAccessBtn) {
+        quickAccessBtn.addEventListener('click', bulkAddFavourites);
+    }
+
     // Close modal when clicking outside
     window.addEventListener('click', function(event) {
         const detailModal = document.getElementById('itemDetailModal');
@@ -33,15 +38,61 @@ function setupEventListeners() {
             bookModal.style.display = 'none';
         }
     });
+
+    // Event delegation for item title click -> show detail
+    document.addEventListener('click', function(event) {
+        const titleCell = event.target.closest('.item-title');
+        if (titleCell) {
+            const source = titleCell.dataset.source;
+            const itemId = titleCell.dataset.itemId;
+            const titleText = titleCell.dataset.title;
+            showItemDetail(source, itemId, titleText);
+        }
+    });
 }
 
-// Search debounce
-let searchDebounceTimer;
-function debounceSearch(query) {
-    clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = setTimeout(() => {
-        applyFilters();
-    }, 300);
+// Real-time fuzzy search
+// Local filter search for inventory
+function filterInventory() {
+    const searchInput = document.getElementById('inventorySearch');
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const tableRows = document.querySelectorAll('#inventoryBody tr');
+    let visibleCount = 0;
+    tableRows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        let match = false;
+        // Search in Title, Grade, Stock columns
+        for (let i = 0; i < Math.min(4, cells.length); i++) {
+            const cellText = cells[i].textContent.toLowerCase();
+            if (cellText.includes(searchTerm)) {
+                match = true;
+                break;
+            }
+        }
+        if (searchTerm === '' || match) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    // Show message if no results found
+    if (visibleCount === 0 && searchTerm !== '') {
+        const tbody = document.getElementById('inventoryBody');
+        const existingMessage = tbody.querySelector('.no-results');
+        if (!existingMessage) {
+            const noResultsRow = document.createElement('tr');
+            noResultsRow.className = 'no-results';
+            noResultsRow.innerHTML = `<td colspan="7" style="text-align: center; padding: 20px; color: #8b92ad;">No items found matching "${escapeHtml(searchTerm)}"</td>`;
+            tbody.appendChild(noResultsRow);
+        }
+    } else {
+        // Remove no results message if search is cleared
+        const noResultsRow = document.querySelector('.no-results');
+        if (noResultsRow) {
+            noResultsRow.remove();
+        }
+    }
 }
 
 // Load inventory from API
@@ -58,9 +109,11 @@ async function loadInventory() {
         }
         
         allItems = data.items || [];
+        console.log('Loaded items:', allItems.length, allItems.slice(0, 1));
         filteredItems = [...allItems];
         displayInventory(filteredItems);
         updateSelectionCount();
+        applyFilters(); // Apply grade filter after loading
     } catch (error) {
         console.error('Error loading inventory:', error);
         const tbody = document.getElementById('inventoryBody');
@@ -68,27 +121,22 @@ async function loadInventory() {
     }
 }
 
-// Apply filters
+// Apply filters (grade only)
 function applyFilters() {
-    const searchTerm = document.getElementById('inventorySearch').value.toLowerCase();
     const gradeFilter = document.getElementById('gradeFilter').value;
-    const categoryFilter = document.getElementById('categoryFilter').value;
+    const searchQuery = document.getElementById('inventorySearch').value;
+    
+    // If search is active, don't override with filter
+    if (searchQuery.length > 0) {
+        filterInventory();
+        return;
+    }
     
     filteredItems = allItems.filter(item => {
-        const itemTitle = (item.item_name || item.title || '').toLowerCase();
-        const itemId = (item.isbn || item.item_id || '').toLowerCase();
-        
-        const matchesSearch = !searchTerm || 
-            itemTitle.includes(searchTerm) ||
-            itemId.includes(searchTerm);
-        
         const matchesGrade = !gradeFilter || 
             (item.grade_level || '').toLowerCase().includes(gradeFilter.toLowerCase());
         
-        const matchesCategory = !categoryFilter || 
-            (item.category || '').toLowerCase().includes(categoryFilter.toLowerCase());
-        
-        return matchesSearch && matchesGrade && matchesCategory;
+        return matchesGrade;
     });
     
     currentPage = 1;
@@ -111,19 +159,30 @@ function displayInventory(items) {
         const source = item.source || 'manual';
         const gradeLevel = item.grade_level || 'N/A';
         const stock = item.quantity_on_hand || 0;
-        const price = item.unit_price || 0;
+        // Always use rate field for price, parse from string if needed
+        let price = 0;
+        if (item.rate) {
+            if (typeof item.rate === 'string') {
+                const match = item.rate.match(/([\d,.]+)/);
+                price = match ? parseFloat(match[1].replace(/,/g, '')) : 0;
+            } else {
+                price = parseFloat(item.rate);
+            }
+        }
         
         const stockClass = stock === 0 ? 'out-of-stock' : 
                           (stock < 10) ? 'low-stock' : '';
         const stockStatus = stock === 0 ? ' (Out of Stock)' : '';
+        const isFavourite = item.is_favourite ? 'active' : '';
+        const favouriteIcon = item.is_favourite ? '<i class="fas fa-star"></i>' : '<i class="fas fa-star" style="color: #ccc;"></i>';
         
         return `
             <tr class="${stockClass}">
                 <td style="width: 40px;">
                     <input type="checkbox" class="item-checkbox" data-item-id="${itemId}" 
-                           onchange="updateSelection()">
+                           ${selectedItems.has(String(itemId)) ? 'checked' : ''} onchange="updateSelection()">
                 </td>
-                <td class="item-title" onclick="showItemDetail('${source}', ${itemId}, '${escapeHtml(itemTitle)}')">
+                <td class="item-title" data-source="${source}" data-item-id="${itemId}" data-title="${escapeHtml(itemTitle)}">
                     ${escapeHtml(itemTitle)}
                 </td>
                 <td>${escapeHtml(gradeLevel)}</td>
@@ -131,15 +190,20 @@ function displayInventory(items) {
                     <span class="stock-quantity ${stock === 0 ? 'out-of-stock' : ''}">${stock}</span>
                     ${stockStatus}
                 </td>
-                <td>${formatPrice(price)}</td>
-                <td style="width: 100px;">
-                    <button class="action-btn edit-btn" title="Edit" onclick="editItem(${itemId}, '${source}')">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </td>
+                <td>JMD ${price.toFixed(2)}</td>
+                <td style="width: 100px; text-align: center; color: #f59e0b;">${favouriteIcon}</td>
             </tr>
         `;
     }).join('');
+
+    // Repair select-all checkbox state and ensure selection count is accurate
+    const visibleCheckboxes = tbody.querySelectorAll('.item-checkbox');
+    const allChecked = visibleCheckboxes.length > 0 && Array.from(visibleCheckboxes).every(cb => cb.checked);
+    const selectAll = document.getElementById('selectAllCheckbox');
+    if (selectAll) selectAll.checked = allChecked;
+
+    // Update the selection count after rendering
+    updateSelectionCount();
 }
 
 // Toggle select all checkbox
@@ -403,8 +467,223 @@ function showBulkActionsMenu() {
         showErrorMessage('Please select items first');
         return;
     }
-    // TODO: Implement bulk actions
-    showErrorMessage('Bulk actions coming soon');
+    // Show the bulk actions panel
+    document.getElementById('bulkActionsPanel').classList.add('active');
+    // Reset input fields
+    document.getElementById('bulkQuantityAdd').value = '';
+    document.getElementById('bulkQuantityDeduct').value = '';
+}
+
+// Close bulk actions menu
+function closeBulkActionsMenu() {
+    document.getElementById('bulkActionsPanel').classList.remove('active');
+}
+
+// Bulk Add Quantity
+async function bulkAddQuantity() {
+    const quantity = parseInt(document.getElementById('bulkQuantityAdd').value);
+    if (!quantity || quantity < 1) {
+        showErrorMessage('Please enter a valid quantity');
+        return;
+    }
+    
+    if (selectedItems.size === 0) {
+        showErrorMessage('No items selected');
+        return;
+    }
+    
+    try {
+        let successCount = 0;
+        let failureCount = 0;
+        
+        for (const itemId of selectedItems) {
+            const item = allItems.find(i => i.item_id == itemId);
+            if (!item) continue;
+            
+            const payload = {
+                item_id: itemId,
+                adjustment_amount: quantity,
+                reason: 'Bulk add',
+                notes: 'Bulk adjustment from inventory page'
+            };
+            
+            const response = await fetch('../backend/api/catalogue/adjust_stock.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await parseJsonOrText(response);
+            if (response.ok && data.success) {
+                successCount++;
+            } else {
+                console.error('Adjustment error:', data.error);
+                failureCount++;
+            }
+        }
+        
+        showSuccessMessage(`Added quantity to ${successCount} item(s)${failureCount > 0 ? `, ${failureCount} failed` : ''}`);
+        closeBulkActionsMenu();
+        selectedItems.clear();
+        loadInventory();
+    } catch (error) {
+        console.error('Bulk add error:', error);
+        showErrorMessage('Error adding quantity to items: ' + error.message);
+    }
+}
+
+// Bulk Deduct Quantity
+async function bulkDeductQuantity() {
+    const quantity = parseInt(document.getElementById('bulkQuantityDeduct').value);
+    if (!quantity || quantity < 1) {
+        showErrorMessage('Please enter a valid quantity');
+        return;
+    }
+    
+    if (selectedItems.size === 0) {
+        showErrorMessage('No items selected');
+        return;
+    }
+    
+    try {
+        let successCount = 0;
+        let failureCount = 0;
+        
+        for (const itemId of selectedItems) {
+            const item = allItems.find(i => i.item_id == itemId);
+            if (!item) continue;
+            
+            const payload = {
+                item_id: itemId,
+                adjustment_amount: quantity,  // Send positive value
+                reason: 'Bulk deduct',
+                notes: 'Bulk adjustment from inventory page'
+            };
+            
+            const response = await fetch('../backend/api/catalogue/adjust_stock.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await parseJsonOrText(response);
+            if (response.ok && data.success) {
+                successCount++;
+            } else {
+                console.error('Adjustment error:', data.error);
+                failureCount++;
+            }
+        }
+        
+        showSuccessMessage(`Deducted quantity from ${successCount} item(s)${failureCount > 0 ? `, ${failureCount} failed` : ''}`);
+        closeBulkActionsMenu();
+        selectedItems.clear();
+        loadInventory();
+    } catch (error) {
+        console.error('Bulk deduct error:', error);
+        showErrorMessage('Error deducting quantity from items: ' + error.message);
+    }
+}
+
+// Bulk Add to Favourites
+async function bulkAddFavourites() {
+    if (selectedItems.size === 0) {
+        showErrorMessage('No items selected');
+        return;
+    }
+    
+    try {
+        let successCount = 0;
+        let failureCount = 0;
+        
+        for (const itemId of selectedItems) {
+            const item = allItems.find(i => i.item_id == itemId);
+            if (!item) continue;
+            
+            // Skip if already favourite
+            if (item.is_favourite) continue;
+            
+            const response = await fetch('../backend/api/catalogue/favourites.php?action=add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ item_id: itemId })
+            });
+            
+            const data = await parseJsonOrText(response);
+            if (response.ok && data.success) {
+                successCount++;
+            } else {
+                console.error('Favourite error:', data.error);
+                failureCount++;
+            }
+        }
+        
+        showSuccessMessage(`Added ${successCount} item(s) to favourites${failureCount > 0 ? `, ${failureCount} failed` : ''}`);
+        closeBulkActionsMenu();
+        loadInventory();
+    } catch (error) {
+        console.error('Bulk favourites error:', error);
+        showErrorMessage('Error adding items to favourites: ' + error.message);
+    }
+}
+
+// Bulk Update Threshold
+async function bulkUpdateThreshold() {
+    const threshold = parseInt(document.getElementById('bulkThresholdValue').value);
+    if (!threshold || threshold < 1) {
+        showErrorMessage('Please enter a valid threshold value');
+        return;
+    }
+    
+    if (selectedItems.size === 0) {
+        showErrorMessage('No items selected');
+        return;
+    }
+    
+    try {
+        let successCount = 0;
+        let failureCount = 0;
+        
+        for (const itemId of selectedItems) {
+            const item = allItems.find(i => i.item_id == itemId);
+            if (!item) continue;
+            
+            const payload = {
+                item_id: itemId,
+                threshold: threshold
+            };
+            
+            const response = await fetch('../backend/api/catalogue/low_stock_alerts.php?action=set_threshold', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await parseJsonOrText(response);
+            if (response.ok && data.success) {
+                successCount++;
+            } else {
+                console.error('Threshold error:', data.error);
+                failureCount++;
+            }
+        }
+        
+        showSuccessMessage(`Updated threshold for ${successCount} item(s)${failureCount > 0 ? `, ${failureCount} failed` : ''}`);
+        closeBulkActionsMenu();
+        document.getElementById('bulkThresholdValue').value = '';
+        loadInventory();
+    } catch (error) {
+        console.error('Bulk threshold error:', error);
+        showErrorMessage('Error updating threshold: ' + error.message);
+    }
 }
 
 // Real-time updates
@@ -415,7 +694,7 @@ function setupRealTimeUpdates() {
             showItemDetail(currentDetailItem.source, currentDetailItem.itemId, currentDetailItem.title);
         }
         loadInventory();
-    }, 5000); // Refresh every 5 seconds
+    }, 60000); // Refresh every minute
 }
 
 // Utility functions
@@ -471,3 +750,50 @@ function showSuccessMessage(message) {
 window.addEventListener('beforeunload', () => {
     if (updateInterval) clearInterval(updateInterval);
 });
+
+// Toggle favourite
+function toggleFavourite(itemId, source, button) {
+    const isFavourite = button.classList.contains('active');
+    const action = isFavourite ? 'remove' : 'add';
+    
+    const payload = {};
+    if (source === 'csv') {
+        payload.item_id = itemId;
+    } else {
+        payload.book_id = itemId;
+    }
+    
+    fetch(`../backend/api/catalogue/favourites.php?action=${action}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(async response => await parseJsonOrText(response))
+    .then(data => {
+        if (data.success) {
+            button.classList.toggle('active');
+            button.title = isFavourite ? 'Add to Favourites' : 'Remove from Favourites';
+            showSuccessMessage(isFavourite ? 'Removed from Favourites' : 'Added to Favourites');
+            loadInventory(); // Reload to update favourite status
+        } else {
+            console.error('Error toggling favourite:', data.error || 'Unknown error');
+            showErrorMessage('Error: ' + (data.error || 'Failed to toggle favourite'));
+        }
+    })
+    .catch(error => {
+        console.error('Favourite toggle error:', error);
+        showErrorMessage('Error toggling favourite');
+    });
+}
+
+// Helper to parse JSON responses safely even if server returns HTML error pages
+async function parseJsonOrText(response) {
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+    if (contentType.includes('application/json')) {
+        try { return JSON.parse(text); } catch (e) { return { success: false, error: 'Invalid JSON response' }; }
+    }
+    try { return JSON.parse(text); } catch (e) { return { success: false, error: text }; }
+}

@@ -120,11 +120,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             method: 'POST',
             body: formData
         })
-            .then(response => {
+            .then(async response => {
                 if (!response.ok) {
                     throw new Error('HTTP error, status = ' + response.status);
                 }
-                return response.json();
+                const text = await response.text();
+                try { return JSON.parse(text); } catch (e) { throw new Error(text || 'Invalid JSON response'); }
             })
             .then(data => {
                 showSummary(data);
@@ -190,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function loadImportLogs() {
         fetch('../backend/api/dashboard.php?action=getImportLogs')
-            .then(response => response.json())
+            .then(async response => { const text = await response.text(); try { return JSON.parse(text); } catch (e) { return []; } })
             .then(data => {
                 const logsList = document.getElementById('importLogsList');
                 if (data && Array.isArray(data) && data.length > 0) {
