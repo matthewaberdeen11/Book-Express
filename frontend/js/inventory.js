@@ -352,20 +352,19 @@ async function saveBook(event, itemId = null, source = null) {
     
     try {
         if (itemId) {
-            // Edit existing item
-            const endpoint = source === 'csv' ? 
-                '../backend/api/catalogue/update_item.php' : 
-                '../backend/api/catalogue/update_item.php';
+            // Edit existing item - use PUT method with proper book_id
+            formData.book_id = itemId;
             
-            formData[source === 'csv' ? 'item_id' : 'book_id'] = itemId;
-            
-            const response = await fetch(endpoint, {
-                method: 'POST',
+            const response = await fetch('../backend/api/catalogue/update_item.php', {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             });
             
-            if (!response.ok) throw new Error('Failed to update book');
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Failed to update book');
+            }
         } else {
             // Create new item
             const response = await fetch('../backend/api/catalogue/create_item.php', {
@@ -374,7 +373,10 @@ async function saveBook(event, itemId = null, source = null) {
                 body: JSON.stringify(formData)
             });
             
-            if (!response.ok) throw new Error('Failed to create book');
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Failed to create book');
+            }
         }
         
         closeBookModal();
@@ -382,7 +384,7 @@ async function saveBook(event, itemId = null, source = null) {
         showSuccessMessage(itemId ? 'Book updated successfully' : 'Book added successfully');
     } catch (error) {
         console.error('Error saving book:', error);
-        showErrorMessage('Failed to save book');
+        showErrorMessage(error.message || 'Failed to save book');
     }
 }
 
